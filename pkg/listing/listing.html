@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{{ .Name }}</title>
+    </head>
+    <body>
+        <h1>{{ .Name }}</h1>
+        <ul>
+            {{ range .Directories }}
+            <li><a href="{{ hashName .Name }}/">{{ .Name }}</a></li>
+            {{ end }}
+        </ul>
+        <ul>
+            {{ range .Files }}
+            <li>{{ .Name }}</li>
+            {{ end }}
+        </ul>
+    </body>
+</html>
