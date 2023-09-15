@@ -19,9 +19,6 @@ import (
 
 var (
 	hashTable = crc64.MakeTable(crc64.ECMA)
-	//go:embed listing.html
-	listingTemplateText string
-	listingTemplate     = template.Must(template.New("listing.html").Funcs(map[string]any{"hashName": hashName}).Parse(listingTemplateText))
 )
 
 func hashName(name string) string {
@@ -35,7 +32,24 @@ func internalError(w http.ResponseWriter, err error, format string, a ...any) {
 	io.WriteString(w, fmt.Sprintf(format+": %s", args...))
 }
 
-func HandleListing(w http.ResponseWriter, req *http.Request) {
+type ListingHandler struct {
+	template *template.Template
+}
+
+func NewListingHandler(resources fs.FS) (http.Handler, error) {
+	var err error
+	tmpl := template.New("listing.html").Funcs(template.FuncMap{
+		"hashName": hashName,
+	})
+	if tmpl, err = tmpl.ParseFS(resources, "listing.html"); err != nil {
+		return nil, fmt.Errorf("failed to parse listing template: %w", err)
+	}
+	return &ListingHandler{
+		template: tmpl,
+	}, nil
+}
+
+func (h *ListingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	dir, err := os.OpenFile("/media", os.O_RDONLY, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -82,7 +96,7 @@ func HandleListing(w http.ResponseWriter, req *http.Request) {
 		return strings.Compare(a.Name(), b.Name())
 	})
 
-	err = listingTemplate.Execute(w, map[string]interface{}{
+	err = h.template.Execute(w, map[string]interface{}{
 		"Name": dir.Name(),
 		"Directories": utils.Filter(children, func(e fs.DirEntry) bool {
 			return e.IsDir()
