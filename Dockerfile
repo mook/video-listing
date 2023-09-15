@@ -6,6 +6,7 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     go mod download && go mod verify
 
+ENV CGO_CFLAGS="-D_LARGEFILE64_SOURCE"
 COPY . .
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     go build -o /go/video-listing .
