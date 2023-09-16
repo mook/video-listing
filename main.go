@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 
+	"github.com/go-gst/go-glib/glib"
+	"github.com/go-gst/go-gst/gst"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mook/video-listing/pkg/listing"
 	"github.com/sirupsen/logrus"
@@ -19,6 +22,10 @@ var (
 )
 
 func run(ctx context.Context) error {
+	gst.Init(&os.Args)
+
+	glib.NewMainLoop(nil, true)
+
 	resources, err := fs.Sub(resourcesRoot, "res")
 	if err != nil {
 		return fmt.Errorf("failed to load resources: %w", err)
@@ -36,6 +43,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to make listing handler: %w", err)
 	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/", listingHandler)
 	mux.Handle("/_/", http.StripPrefix("/_/", http.FileServer(http.FS(resources))))

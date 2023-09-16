@@ -11,11 +11,15 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/gst/app"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -23,6 +27,14 @@ import (
 const (
 	// The length of a path part in the URL, in characters
 	tokenLength = crc64.Size * 2
+)
+
+type entryType int
+
+const (
+	entryTypeVideo entryType = iota // Entry is a video file
+	entryTypeDir                    // Entry is a directory
+	entryTypeOther                  // Entry is a non-video file
 )
 
 var (
@@ -43,9 +55,12 @@ func hashName(name string) string {
 
 type listingStatments struct {
 	insert        *sql.Stmt // Insert a new entry
+	setThumbnail  *sql.Stmt // Update the thumbnail
 	queryName     *sql.Stmt // Query for one entry
 	queryChildren *sql.Stmt // Query for entries
+	queryAll      *sql.Stmt // Get all entries (for background tasks)
 	access        *sql.Stmt // Update the last accessed time of an entry
+	delete        *sql.Stmt // Remove a given entry
 }
 
 type ListingHandler struct {
@@ -66,25 +81,28 @@ func NewListingHandler(ctx context.Context, resources fs.FS, conn *sql.Conn) (ht
 	if stmts, err = createDatabase(ctx, conn); err != nil {
 		return nil, err
 	}
-	return &ListingHandler{
+	result := &ListingHandler{
 		template: tmpl,
 		dbConn:   conn,
 		stmts:    stmts,
-	}, nil
+	}
+	go result.scanVideos(ctx)
+	return result, nil
 }
 
 func createDatabase(ctx context.Context, conn *sql.Conn) (listingStatments, error) {
 	result := listingStatments{}
-	_, err := conn.ExecContext(ctx, `
+	_, err := conn.ExecContext(ctx, fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS listing_cache (
 			parent TEXT NOT NULL COLLATE NOCASE, -- URL path of parent
 			hash TEXT NOT NULL COLLATE NOCASE,   -- Hash of this entry
 			path TEXT NOT NULL COLLATE NOCASE,   -- Absolute file name
-			is_dir INT CHECK (is_dir IN (0, 1)), -- Whether this entry is a directory
+			type INT CHECK (type IN (%d, %d, %d)), -- Type of this entry
 			last_used INT DEFAULT (unixepoch('now', 'utc')),
+			thumbnail BLOB,
 			PRIMARY KEY (parent, hash)
 		) STRICT
-	`)
+	`, entryTypeVideo, entryTypeDir, entryTypeOther))
 	if err != nil {
 		return result, fmt.Errorf("error creating table: %w", err)
 	}
@@ -95,10 +113,16 @@ func createDatabase(ctx context.Context, conn *sql.Conn) (listingStatments, erro
 		return result, fmt.Errorf("error creating index: %w", err)
 	}
 	result.insert, err = conn.PrepareContext(ctx, `
-		INSERT OR REPLACE INTO listing_cache (parent, hash, path, is_dir) VALUES (?, ?, ?, ?)
+		INSERT OR REPLACE INTO listing_cache (parent, hash, path, type) VALUES (?, ?, ?, ?)
 	`)
 	if err != nil {
 		return result, fmt.Errorf("error preparing insert: %w", err)
+	}
+	result.setThumbnail, err = conn.PrepareContext(ctx, `
+		UPDATE listing_cache SET thumbnail = ?, type = ? WHERE parent = ? AND hash = ?
+	`)
+	if err != nil {
+		return result, fmt.Errorf("error preparing thumbnail set: %w", err)
 	}
 	result.queryName, err = conn.PrepareContext(ctx, `
 		SELECT path FROM listing_cache WHERE parent = ? AND hash = ? LIMIT 1
@@ -106,11 +130,21 @@ func createDatabase(ctx context.Context, conn *sql.Conn) (listingStatments, erro
 	if err != nil {
 		return result, fmt.Errorf("error preparing name query: %w", err)
 	}
-	result.queryChildren, err = conn.PrepareContext(ctx, `
-		SELECT path, is_dir FROM listing_cache WHERE parent = ? AND hash != "" ORDER BY path ASC
-	`)
+	result.queryChildren, err = conn.PrepareContext(ctx, fmt.Sprintf(`
+		SELECT path, type
+		FROM listing_cache
+		WHERE parent = ? AND hash != "" AND type != %d ORDER BY path ASC
+	`, entryTypeOther))
 	if err != nil {
 		return result, fmt.Errorf("error preparing children query: %w", err)
+	}
+	result.queryAll, err = conn.PrepareContext(ctx, `
+		SELECT parent, hash, path, type, thumbnail NOT NULL
+		FROM listing_cache
+		ORDER BY last_used DESC
+	`)
+	if err != nil {
+		return result, fmt.Errorf("error preparing caching update query: %w", err)
 	}
 	result.access, err = conn.PrepareContext(ctx, `
 		UPDATE listing_cache SET last_used = unixepoch("now", "utc")
@@ -118,6 +152,12 @@ func createDatabase(ctx context.Context, conn *sql.Conn) (listingStatments, erro
 	`)
 	if err != nil {
 		return result, fmt.Errorf("error preparing access: %w", err)
+	}
+	result.delete, err = conn.PrepareContext(ctx, `
+		DELETE FROM listing_cache WHERE parent = ? AND hash = ?
+	`)
+	if err != nil {
+		return result, fmt.Errorf("error removing stale entry: %w", err)
 	}
 	_, _ = result.insert.Exec("", "", "/media", 1)
 	return result, nil
@@ -154,14 +194,15 @@ func (h *ListingHandler) getListing(ctx context.Context, parent string) (*direct
 	found := false
 	for rows.Next() {
 		var name string
-		var isDir bool
-		if err = rows.Scan(&name, &isDir); err != nil {
+		var typ entryType
+		if err = rows.Scan(&name, &typ); err != nil {
 			return nil, fmt.Errorf("error reading row: %w", err)
 		}
 		name = path.Base(name)
-		if isDir {
+		switch typ {
+		case entryTypeDir:
 			result.Directories = append(result.Directories, name)
-		} else {
+		case entryTypeVideo:
 			result.Files = append(result.Files, name)
 		}
 		found = true
@@ -262,4 +303,170 @@ func (h *ListingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		fmt.Printf("Failed to render template for %s: %s\n", entry.Name, err)
 	}
+}
+
+// scanVideos will be run in the background to supply thumbnail images as well
+// as to remove stale entries.
+func (h *ListingHandler) scanVideos(ctx context.Context) {
+	for {
+		rows, err := h.stmts.queryAll.QueryContext(ctx)
+		if err != nil {
+			logrus.WithError(err).Error("failed to get cached entries")
+			time.Sleep(time.Second)
+			continue
+		}
+		for rows.Next() {
+			var parent, hash, path string
+			var typ entryType
+			var hasThumbnail bool
+
+			time.Sleep(time.Second)
+			err = rows.Scan(&parent, &hash, &path, &typ, &hasThumbnail)
+			if err != nil {
+				logrus.WithError(err).Info("Skipping invalid row")
+				continue
+			}
+
+			_, err := os.Stat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				// This entry no longer exists
+				_, _ = h.stmts.delete.ExecContext(ctx, parent, hash)
+				continue
+			} else if err != nil {
+				logrus.WithError(err).Info("Error checking file")
+				continue
+			}
+
+			switch typ {
+			case entryTypeDir:
+				// TODO: refresh in the background
+			case entryTypeVideo:
+				if !hasThumbnail {
+					if err = h.makeThumbnail(ctx, parent, hash, path); err != nil {
+						logrus.WithError(err).Info("Failed to make thumbnail")
+					}
+				}
+			}
+		}
+	}
+}
+
+// scaleSample scales the input sample to given dimensions.
+// This is just video.ConvertSample with more details.
+func scaleSample(ctx context.Context, sample *gst.Sample, width, height int) (*gst.Sample, error) {
+	pipeline, err := gst.NewPipelineFromString(fmt.Sprintf(`
+		appsrc name=src ! videoconvertscale ! video/x-raw,width=%d,height=%d ! jpegenc ! appsink name=sink
+	`, width, height))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pipeline: %w", err)
+	}
+	srcElement, err := pipeline.GetElementByName("src")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get source: %w", err)
+	}
+	src := app.SrcFromElement(srcElement)
+	if flowReturn := src.PushSample(sample); flowReturn != gst.FlowOK {
+		return nil, fmt.Errorf("pushing sample returned %s", &flowReturn)
+	}
+	sinkElement, err := pipeline.GetElementByName("sink")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sink: %w", err)
+	}
+	sink := app.SinkFromElement(sinkElement)
+
+	// preroll
+	if err = pipeline.SetState(gst.StatePaused); err != nil {
+		return nil, fmt.Errorf("failed to pause pipeline: %w", err)
+	}
+	defer pipeline.SetState(gst.StateNull)
+
+	sample = sink.PullPreroll()
+	if sample == nil {
+		return nil, fmt.Errorf("failed to get sample")
+	}
+
+	return sample, nil
+}
+
+// makeThumbnail creates a thumbnail for a cache entry.
+func (h *ListingHandler) makeThumbnail(ctx context.Context, parent, hash, path string) error {
+	// This is partially based on:
+	// https://cgit.freedesktop.org/gstreamer/gstreamer/tree/subprojects/gst-plugins-base/tests/examples/snapshot/snapshot.c
+
+	logrus.WithField("path", path).Trace("Creating thumbnail...")
+
+	// Construct a pipeline to decode the file
+	u := &url.URL{Scheme: "file", Path: path}
+	pipeline, err := gst.NewPipelineFromString(fmt.Sprintf(`
+		uridecodebin uri=%s ! videoconvertscale ! appsink name=sink
+	`, u.String()))
+	if err != nil {
+		return fmt.Errorf("failed to make pipeline for %s: %w", path, err)
+	}
+
+	// Get the sink element from the pipeline
+	sinkElement, err := pipeline.GetElementByName("sink")
+	if err != nil {
+		return fmt.Errorf("failed to get sink for %s: %w", path, err)
+	}
+	sink := app.SinkFromElement(sinkElement)
+
+	// Pause the pipeline (preroll)
+	if err = pipeline.SetState(gst.StatePaused); err != nil {
+		return fmt.Errorf("failed to pause pipeline %s: %w", path, err)
+	}
+	stateResult, _ := pipeline.GetState(gst.StatePaused, gst.ClockTime(5*time.Second))
+	if stateResult == gst.StateChangeFailure {
+		_, err = h.stmts.setThumbnail.ExecContext(ctx, nil, entryTypeOther, parent, hash)
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to disable entry %s", path)
+		}
+		return fmt.Errorf("failed to preroll pipeline %s", path)
+	}
+	defer pipeline.SetState(gst.StateNull)
+
+	// Seek to a time
+	seekOffset := int64(time.Second)
+	ok, duration := pipeline.QueryDuration(gst.FormatTime)
+	if ok && duration > 0 {
+		seekOffset = duration * 40 / 100
+	}
+	// We don't seem to have gst_element_seek_simple or even gst_element_seek;
+	// implement it manually with events.
+	_ = pipeline.SendEvent(gst.NewSeekEvent(
+		1.0, // rate
+		gst.FormatTime,
+		gst.SeekFlagFlush|gst.SeekFlagKeyUnit|gst.SeekFlagSnapNearest,
+		gst.SeekTypeSet, // start type
+		seekOffset,      // start position
+		gst.SeekTypeEnd, // stop type
+		0,               // stop position
+	))
+
+	// Get the sample for the thumbnail image
+	sample := sink.PullPreroll()
+	if sample == nil {
+		return fmt.Errorf("failed to get sample for %s", path)
+	}
+
+	// Scale the image while keeping the aspect ratio
+	structure := sample.GetCaps().GetStructureAt(0)
+	width, errWidth := structure.GetValue("width")
+	height, errHeight := structure.GetValue("height")
+	if errWidth != nil || errHeight != nil {
+		logrus.WithFields(logrus.Fields{"width": errWidth, "height": errHeight}).Error("could not get sample size")
+	} else {
+		desiredHeight := int(int64(height.(int)) * 320 / int64(width.(int)))
+		sample, err = scaleSample(ctx, sample, 320, desiredHeight)
+		if err != nil {
+			return fmt.Errorf("failed to scale sample: %w", err)
+		}
+	}
+
+	_, err = h.stmts.setThumbnail.ExecContext(ctx, sample.GetBuffer().Bytes(), entryTypeVideo, parent, hash)
+	if err != nil {
+		return fmt.Errorf("failed to set thumbnail for %s: %w", path, err)
+	}
+
+	return nil
 }
