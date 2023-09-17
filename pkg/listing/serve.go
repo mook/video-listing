@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mook/video-listing/pkg/thumnailer"
+	"github.com/mook/video-listing/pkg/transcoder"
 	"github.com/mook/video-listing/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -43,6 +44,7 @@ var (
 // A directoryListing holds information needed to render a page
 type directoryListing struct {
 	Name        string   // The name of this directory
+	Path        string   // The path to this directory
 	Directories []string // Any subdirectories
 	Files       []string // Any files in this directory
 }
@@ -55,7 +57,7 @@ func hashName(name string) string {
 type listingStatments struct {
 	insert        *sql.Stmt // Insert a new entry
 	setThumbnail  *sql.Stmt // Update the thumbnail
-	queryName     *sql.Stmt // Query for one entry
+	queryPath     *sql.Stmt // Query for one entry
 	queryChildren *sql.Stmt // Query for entries
 	queryAll      *sql.Stmt // Get all entries (for background tasks)
 	access        *sql.Stmt // Update the last accessed time of an entry
@@ -68,7 +70,7 @@ type ListingHandler struct {
 	stmts    listingStatments
 }
 
-func NewListingHandler(ctx context.Context, resources fs.FS, conn *sql.Conn) (http.Handler, error) {
+func NewListingHandler(ctx context.Context, resources fs.FS, conn *sql.Conn) (*ListingHandler, error) {
 	var err error
 	var stmts listingStatments
 	tmpl := template.New("listing.html").Funcs(template.FuncMap{
@@ -130,7 +132,7 @@ func createDatabase(ctx context.Context, conn *sql.Conn) (listingStatments, erro
 	if err != nil {
 		return result, fmt.Errorf("error preparing thumbnail set: %w", err)
 	}
-	result.queryName, err = conn.PrepareContext(ctx, `
+	result.queryPath, err = conn.PrepareContext(ctx, `
 		SELECT path FROM listing_cache WHERE parent = ? AND hash = ? LIMIT 1
 	`)
 	if err != nil {
@@ -173,10 +175,10 @@ func createDatabase(ctx context.Context, conn *sql.Conn) (listingStatments, erro
 // all in lower case hash chunks joined by slash ("/") without any preceding or
 // trailing slashes.
 func (h *ListingHandler) getListing(ctx context.Context, parent string) (*directoryListing, error) {
-	result := &directoryListing{}
+	result := &directoryListing{Path: parent}
 
 	grandParent, leaf := utils.CutLastString(parent, "/")
-	row := h.stmts.queryName.QueryRowContext(ctx, grandParent, leaf)
+	row := h.stmts.queryPath.QueryRowContext(ctx, grandParent, leaf)
 	if err := row.Scan(&result.Name); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			// This is just a cache miss (probably)
@@ -267,6 +269,7 @@ func (h *ListingHandler) readDirectory(ctx context.Context, urlPath string) (*di
 
 	result := &directoryListing{
 		Name: dir.Name(),
+		Path: urlPath,
 	}
 	for _, entry := range children {
 		entryTime := readTime
@@ -378,5 +381,40 @@ func (h *ListingHandler) scanVideos(ctx context.Context) {
 				}
 			}
 		}()
+	}
+}
+
+func (h *ListingHandler) ServeVideo(w http.ResponseWriter, req *http.Request) {
+	urlPath := strings.ToLower(strings.Trim(req.URL.Path, "/"))
+	playlistPath := path.Join("/cache", urlPath, transcoder.PlaylistName)
+	_, err := os.Stat(playlistPath)
+	if err == nil {
+		http.ServeFile(w, req, playlistPath)
+		return
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		logrus.WithError(err).WithField("path", urlPath).Error("Error getting existing playlist")
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, fmt.Sprintf("Error reading playlist: %s", err))
+		return
+	}
+
+	parent, hash := utils.CutLastString(urlPath, "/")
+	var filePath string
+	err = h.stmts.queryPath.QueryRowContext(req.Context(), parent, hash).Scan(&filePath)
+	if err != nil {
+		logrus.WithError(err).WithField("path", urlPath).Debug("Could not find video")
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, fmt.Sprintf("Could not find %s", urlPath))
+		return
+	}
+
+	result, err := transcoder.Transcode(urlPath, filePath)
+	if err != nil {
+		logrus.WithError(err).WithField("path", urlPath).Error("Error transcoding")
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, fmt.Sprintf("Error transcoding %s: %s", urlPath, err))
+	} else {
+		http.ServeFile(w, req, result)
 	}
 }

@@ -3,7 +3,6 @@ package thumnailer
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/go-gst/go-gst/gst"
@@ -42,10 +41,9 @@ func CreateThumbnail(ctx context.Context, path string) ([]byte, error) {
 // generateSample renders a sample image from the given video file
 func generateSample(path string) (*gst.Sample, error) {
 	// Construct a pipeline to decode the file
-	u := &url.URL{Scheme: "file", Path: path}
 	pipeline, err := gst.NewPipelineFromString(fmt.Sprintf(`
-		uridecodebin uri=%s ! videoconvertscale ! appsink name=sink
-	`, u.String()))
+		filesrc location=%s ! decodebin ! videoconvertscale ! appsink name=sink
+	`, path))
 	if err != nil {
 		return nil, fmt.Errorf("failed to make pipeline: %w", err)
 	}

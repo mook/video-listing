@@ -18,4 +18,4 @@ RUN --mount=type=cache,target=/var/cache/apk \
 COPY --from=builder /go/video-listing /usr/local/bin/video-listing
 VOLUME [ "/config", "/cache", "/media" ]
 ENTRYPOINT [ "/usr/local/bin/video-listing" ]
-#ENV GST_DEBUG="*:INFO"
+ENV GST_DEBUG="*:INFO"

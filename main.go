@@ -46,6 +46,7 @@ func run(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", listingHandler)
+	mux.Handle("/v/", http.StripPrefix("/v/", http.HandlerFunc(listingHandler.ServeVideo)))
 	mux.Handle("/_/", http.StripPrefix("/_/", http.FileServer(http.FS(resources))))
 	fmt.Println("Listening...")
 	return http.ListenAndServe(":80", mux)
