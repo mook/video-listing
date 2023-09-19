@@ -14,7 +14,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 
 FROM alpine:edge
 RUN --mount=type=cache,target=/var/cache/apk \
-    apk add -U gst-libav gst-plugins-good gst-plugins-bad
+    apk add -U ffmpeg
 COPY --from=builder /go/video-listing /usr/local/bin/video-listing
 VOLUME [ "/config", "/cache", "/media" ]
 ENTRYPOINT [ "/usr/local/bin/video-listing" ]

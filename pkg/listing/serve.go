@@ -17,8 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mook/video-listing/pkg/thumnailer"
-	"github.com/mook/video-listing/pkg/transcoder"
+	"github.com/mook/video-listing/pkg/ffmpeg"
 	"github.com/mook/video-listing/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -364,7 +363,7 @@ func (h *ListingHandler) scanVideos(ctx context.Context) {
 					}
 				case entryTypeVideo:
 					if !hasThumbnail {
-						buffer, err := thumnailer.CreateThumbnail(ctx, path)
+						buffer, err := ffmpeg.CreateThumbnail(ctx, path)
 						if err != nil {
 							logrus.WithError(err).WithField("path", path).Info("failed to create thumbnail")
 							_, err = h.stmts.setThumbnail.ExecContext(ctx, nil, entryTypeOther, parent, hash)
@@ -386,7 +385,7 @@ func (h *ListingHandler) scanVideos(ctx context.Context) {
 
 func (h *ListingHandler) ServeVideo(w http.ResponseWriter, req *http.Request) {
 	urlPath := strings.ToLower(strings.Trim(req.URL.Path, "/"))
-	playlistPath := path.Join("/cache", urlPath, transcoder.PlaylistName)
+	playlistPath := path.Join("/cache", urlPath, ffmpeg.PlaylistName)
 	_, err := os.Stat(playlistPath)
 	if err == nil {
 		http.ServeFile(w, req, playlistPath)
@@ -409,7 +408,7 @@ func (h *ListingHandler) ServeVideo(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	result, err := transcoder.Transcode(urlPath, filePath)
+	result, err := ffmpeg.PackageForStreaming(req.Context(), urlPath, filePath)
 	if err != nil {
 		logrus.WithError(err).WithField("path", urlPath).Error("Error transcoding")
 		w.WriteHeader(http.StatusInternalServerError)
