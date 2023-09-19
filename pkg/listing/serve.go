@@ -385,9 +385,30 @@ func (h *ListingHandler) scanVideos(ctx context.Context) {
 
 func (h *ListingHandler) ServeVideo(w http.ResponseWriter, req *http.Request) {
 	urlPath := strings.ToLower(strings.Trim(req.URL.Path, "/"))
+	if !strings.HasPrefix(path.Base(urlPath), "stream-") {
+		// If the file name does not start with "stream-", this is a request for
+		// the playlist; handle that separately.
+		h.servePlaylist(w, req)
+		return
+	}
+	chunkPath := path.Join("/cache", urlPath)
+	logrus.WithFields(logrus.Fields{
+		"url":  urlPath,
+		"path": chunkPath,
+	}).Trace("Serving pre-rendered stream chunk")
+	http.ServeFile(w, req, chunkPath)
+}
+
+func (h *ListingHandler) servePlaylist(w http.ResponseWriter, req *http.Request) {
+	urlPath := strings.ToLower(strings.Trim(req.URL.Path, "/"))
 	playlistPath := path.Join("/cache", urlPath, ffmpeg.PlaylistName)
+	log := logrus.WithFields(logrus.Fields{
+		"url":      urlPath,
+		"playlist": playlistPath,
+	})
 	_, err := os.Stat(playlistPath)
 	if err == nil {
+		log.Trace("Serving existing playlist file")
 		http.ServeFile(w, req, playlistPath)
 		return
 	}
@@ -408,12 +429,15 @@ func (h *ListingHandler) ServeVideo(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	log = log.WithField("path", filePath)
+	log.Trace("Transcoding...")
 	result, err := ffmpeg.PackageForStreaming(req.Context(), urlPath, filePath)
 	if err != nil {
 		logrus.WithError(err).WithField("path", urlPath).Error("Error transcoding")
 		w.WriteHeader(http.StatusInternalServerError)
 		io.WriteString(w, fmt.Sprintf("Error transcoding %s: %s", urlPath, err))
 	} else {
+		log.Trace("Serving freshly transcoded file...")
 		http.ServeFile(w, req, result)
 	}
 }

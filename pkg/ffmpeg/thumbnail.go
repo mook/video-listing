@@ -4,17 +4,12 @@ package ffmpeg
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
-	"path"
 	"strconv"
-	"time"
 
 	"github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
 )
 
 const (
@@ -108,72 +103,4 @@ func probe(ctx context.Context, filePath string) (*metadata, error) {
 		return nil, err
 	}
 	return &result, nil
-}
-
-// Package the given filePath for streaming, assuming the given cache key.
-// Returns the path to the playlist file.
-//
-// Note that the returned playlist file may be incomplete by the time this
-// returns; this is to ensure the user can start streaming faster.
-func PackageForStreaming(ctx context.Context, key, filePath string) (string, error) {
-	var err error
-	outDir := path.Join("/cache", key)
-	playlistPath := path.Join(outDir, PlaylistName)
-	if err = os.MkdirAll(outDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create output directory: %w", err)
-	}
-	_ = os.Remove(playlistPath)
-
-	waitForPlaylist := func(cmd *exec.Cmd) bool {
-		ch := make(chan bool, 1)
-		defer close(ch)
-		done := false
-		go func() {
-			_, err := os.Lstat(playlistPath)
-			for !done && errors.Is(err, fs.ErrNotExist) {
-				time.Sleep(100 * time.Millisecond)
-				_, err = os.Lstat(playlistPath)
-			}
-			ch <- true
-		}()
-		go func() {
-			_ = cmd.Wait()
-			ch <- false
-			done = true
-		}()
-		return <-ch
-	}
-
-	args := []string{
-		"-i", filePath, "-f", "dash", "-streaming", "1", "-ldash", "1",
-		"-single_file_name", "stream-$RepresentationID$.$ext$",
-	}
-	cmd := exec.CommandContext(ctx, "ffmpeg", append(args, "-codec:v", "copy", PlaylistName)...)
-	cmd.Dir = outDir
-	if err = cmd.Start(); err != nil {
-		return "", multierr.Append(err, os.RemoveAll(outDir))
-	}
-	if waitForPlaylist(cmd) {
-		if _, err = os.Lstat(playlistPath); err != nil {
-			return "", multierr.Append(err, os.Remove(playlistPath))
-		}
-		return playlistPath, nil
-	}
-	_ = os.Remove(playlistPath) // Remove any broken playlist files
-	// Getting here means the ffmpeg command failed to execute.  Try again
-	// without -codec:v copy
-	cmd = exec.CommandContext(ctx, "ffmpeg", append(args, PlaylistName)...)
-	cmd.Dir = outDir
-	if err = cmd.Start(); err != nil {
-		return "", multierr.Append(err, os.RemoveAll(outDir))
-	}
-	if waitForPlaylist(cmd) {
-		if _, err = os.Lstat(playlistPath); err != nil {
-			return "", multierr.Append(err, os.Remove(playlistPath))
-		}
-		return playlistPath, nil
-	}
-	// ffmpeg still failed to run; cleanup and return error.
-	err = fmt.Errorf("failed to run ffmpeg: %w", cmd.Wait())
-	return "", multierr.Append(err, os.RemoveAll(outDir))
 }
