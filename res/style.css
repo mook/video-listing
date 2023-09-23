@@ -1,10 +1,30 @@
 :root {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --color-foreground: #111;
+    --color-background: #eee;
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
-        color: #eee;
-        background: #111;
+        --color-foreground: #eee;
+        --color-background: #111;
     }
+}
+
+:root {
+    color: var(--color-foreground);
+    background: var(--color-background);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 150%;
+}
+
+:any-link {
+    color: inherit;
+}
+
+#castbutton {
+    position: absolute;
+    top: 1em;
+    right: 1em;
+    width: 10em;
+    cursor: pointer;
 }

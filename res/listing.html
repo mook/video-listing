@@ -15,10 +15,10 @@
         </ul>
         <ul>
             {{ range .Files }}
-            <li><a href="/v/{{ $.Path }}/{{ hashName . }}/">{{ . }}</a></li>
+            <li><a href="/v/{{ $.Path }}/{{ hashName . }}/" onClick="CastManager.getInstance().handleLink(event)">{{ . }}</a></li>
             {{ end }}
         </ul>
         <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" defer></script>
-        <google-cast-launcher></google-cast-launcher>
+        <google-cast-launcher id="castbutton"></google-cast-launcher>
     </body>
 </html>
