@@ -19,9 +19,9 @@
     <head>
         <title>video-listing</title>
         <link href="data:text/plain," rel="icon">
-        <link href="/res/style.css" rel="stylesheet">
-        <script src="/res/cast.js"></script>
-        <script src="/res/ui.js"></script>
+        <link href="style.css" rel="stylesheet">
+        <script src="cast.js"></script>
+        <script src="ui.js"></script>
     </head>
     <body>
         <section id="login">
@@ -30,7 +30,7 @@
             <span id="login-error"></span>
         </section>
         <section id="listing">
-            <h1><a href=".." id="heading"></a></h1>
+            <h1><a href="#" id="heading" onclick="UIManager.getInstance().handleNavigate(this)"></a></h1>
             <ul id="directories"></ul>
             <ul id="files"></ul>
         </section>

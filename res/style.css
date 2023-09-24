@@ -51,6 +51,11 @@
     display: none;
 }
 
+#listing .error {
+    color: red;
+    font-weight: bold;
+}
+
 :root:not([data-state="error"]) #error {
     display: none;
 }
