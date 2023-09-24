@@ -21,6 +21,23 @@
     color: inherit;
 }
 
+:root:not([data-state="login"]) #login {
+    display: none;
+}
+
+#login {
+    display: flex;
+    flex-direction: row;
+}
+
+:root:not([data-state="listing"]) #listing {
+    display: none;
+}
+
+:root:not([data-state="error"]) #error {
+    display: none;
+}
+
 #castbutton {
     position: absolute;
     top: 1em;

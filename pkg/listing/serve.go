@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc64"
@@ -40,12 +41,17 @@ var (
 	hashTable = crc64.MakeTable(crc64.ECMA)
 )
 
+type listingEntry struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
+
 // A directoryListing holds information needed to render a page
 type directoryListing struct {
-	Name        string   // The name of this directory
-	Path        string   // The path to this directory
-	Directories []string // Any subdirectories
-	Files       []string // Any files in this directory
+	Name        string         `json:"name"`        // The name of this directory
+	Path        string         `json:"path"`        // The path to this directory
+	Directories []listingEntry `json:"directories"` // Any subdirectories
+	Files       []listingEntry `json:"files"`       // Any files in this directory
 }
 
 func hashName(name string) string {
@@ -202,9 +208,15 @@ func (h *ListingHandler) getListing(ctx context.Context, parent string) (*direct
 		name = path.Base(name)
 		switch typ {
 		case entryTypeDir:
-			result.Directories = append(result.Directories, name)
+			result.Directories = append(result.Directories, listingEntry{
+				Name: name,
+				Hash: hashName(name),
+			})
 		case entryTypeVideo:
-			result.Files = append(result.Files, name)
+			result.Files = append(result.Files, listingEntry{
+				Name: name,
+				Hash: hashName(name),
+			})
 		}
 		found = true
 	}
@@ -274,12 +286,18 @@ func (h *ListingHandler) readDirectory(ctx context.Context, urlPath string) (*di
 		entryTime := readTime
 		entryType := entryTypeVideo
 		if entry.IsDir() {
-			result.Directories = append(result.Directories, entry.Name())
+			result.Directories = append(result.Directories, listingEntry{
+				Name: entry.Name(),
+				Hash: hashName(entry.Name()),
+			})
 			// Use time 0 so we will walk the directory later
 			entryTime = 0
 			entryType = entryTypeDir
 		} else {
-			result.Files = append(result.Files, entry.Name())
+			result.Files = append(result.Files, listingEntry{
+				Name: entry.Name(),
+				Hash: hashName(entry.Name()),
+			})
 		}
 		// Insert into the cache, ignoring errors.
 		_, err = h.stmts.insert.ExecContext(ctx,
@@ -299,7 +317,7 @@ func (h *ListingHandler) readDirectory(ctx context.Context, urlPath string) (*di
 	return result, nil
 }
 
-func (h *ListingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (h *ListingHandler) ServeJSON(w http.ResponseWriter, req *http.Request) {
 	var err error
 	urlPath := strings.ToLower(strings.Trim(req.URL.Path, "/"))
 	entry, err := h.getListing(req.Context(), urlPath)
@@ -314,9 +332,10 @@ func (h *ListingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = h.template.Execute(w, entry)
-	if err != nil {
-		fmt.Printf("Failed to render template for %s: %s\n", entry.Name, err)
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	if err = encoder.Encode(entry); err != nil {
+		fmt.Printf("Failed to return JSON value for %s: %s\n", entry.Name, err)
 	}
 }
 
