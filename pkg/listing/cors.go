@@ -2,6 +2,9 @@ package listing
 
 import (
 	"net/http"
+	"net/url"
+
+	"github.com/sirupsen/logrus"
 )
 
 type CorsHandler struct {
@@ -9,6 +12,8 @@ type CorsHandler struct {
 }
 
 func (h *CorsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	origin, err := url.Parse(req.Header.Get("Origin"))
+	logrus.WithError(err).Debugf("Serving request %s from %s", req.URL, origin)
 	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.Header().Add("Access-Control-Allow-Methods", "GET, PUT")
 	w.Header().Add("Vary", "Origin")
