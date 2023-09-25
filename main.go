@@ -59,7 +59,9 @@ func run(ctx context.Context) error {
 	mux.Handle("/v/", http.StripPrefix("/v/", http.HandlerFunc(listingHandler.ServeVideo)))
 	mux.Handle("/_/", http.StripPrefix("/_/", http.FileServer(http.FS(resources))))
 	fmt.Println("Listening...")
-	return http.ListenAndServe(":80", mux)
+
+	cors := &listing.CorsHandler{Handler: mux}
+	return http.ListenAndServe(":80", cors)
 }
 
 func main() {
