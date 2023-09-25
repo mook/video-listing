@@ -13,7 +13,7 @@ type CorsHandler struct {
 
 func (h *CorsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	origin, err := url.Parse(req.Header.Get("Origin"))
-	logrus.WithError(err).Debugf("Serving request %s from %s", req.URL, origin)
+	logrus.WithError(err).Debugf("Serving request %s from %s to %s", req.URL, origin, req.RemoteAddr)
 	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.Header().Add("Access-Control-Allow-Methods", "GET, PUT")
 	w.Header().Add("Vary", "Origin")

@@ -441,6 +441,7 @@ func (h *ListingHandler) servePlaylist(w http.ResponseWriter, req *http.Request)
 	log := logrus.WithFields(logrus.Fields{
 		"url":      urlPath,
 		"playlist": playlistPath,
+		"origin":   req.Header.Get("Origin"),
 	})
 	_, err := os.Stat(playlistPath)
 	if err == nil {

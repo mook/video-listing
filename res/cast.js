@@ -135,7 +135,7 @@ class CastManager {
             await this.loadMedia(linkURL.href);
             console.debug(`Played ${ linkURL.href }`);
         } catch (ex) {
-            console.error(`Failed to load media ${ linkURL }:`, e);
+            console.error(`Failed to load media ${ linkURL }:`, ex);
         }
     }
 

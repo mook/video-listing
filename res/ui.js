@@ -179,7 +179,7 @@ class UIManager {
                 const path = this.urlParts.concat(f.hash).join('/');
 
                 li.appendChild(a);
-                a.setAttribute('href', new URL(`v/${ path }`, videoServerURL).href);
+                a.setAttribute('href', new URL(`v/${ path }/`, videoServerURL).href);
                 a.setAttribute('onclick', 'CastManager.getInstance().handleLink(event)');
                 a.textContent = f.name;
 
