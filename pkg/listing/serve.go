@@ -349,6 +349,7 @@ func (h *ListingHandler) ServeJSON(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	w.Header().Add("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	if err = encoder.Encode(entry); err != nil {
@@ -393,7 +394,7 @@ func (h *ListingHandler) scanVideos(ctx context.Context) {
 
 				switch typ {
 				case entryTypeDir:
-					if time.Unix(lastUsed, 0).Add(time.Hour).Before(time.Now()) {
+					if time.Unix(lastUsed, 0).Add(time.Second).Before(time.Now()) {
 						// This directory entry is more than an hour old; scan it.
 						h.readDirectory(ctx, strings.Trim(parent+"/"+hash, "/"))
 					}
@@ -432,6 +433,7 @@ func (h *ListingHandler) ServeVideo(w http.ResponseWriter, req *http.Request) {
 		"url":  urlPath,
 		"path": chunkPath,
 	}).Trace("Serving pre-rendered stream chunk")
+	w.Header().Add("Content-Type", "application/dash+xml")
 	http.ServeFile(w, req, chunkPath)
 }
 
@@ -446,6 +448,7 @@ func (h *ListingHandler) servePlaylist(w http.ResponseWriter, req *http.Request)
 	_, err := os.Stat(playlistPath)
 	if err == nil {
 		log.Trace("Serving existing playlist file")
+		w.Header().Set("Content-Type", "application/dash+xml")
 		http.ServeFile(w, req, playlistPath)
 		return
 	}
@@ -475,6 +478,7 @@ func (h *ListingHandler) servePlaylist(w http.ResponseWriter, req *http.Request)
 		io.WriteString(w, fmt.Sprintf("Error transcoding %s: %s", urlPath, err))
 	} else {
 		log.Trace("Serving freshly transcoded file...")
+		w.Header().Set("Content-Type", "application/dash+xml")
 		http.ServeFile(w, req, result)
 	}
 }
