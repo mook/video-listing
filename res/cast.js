@@ -15,6 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// @ts-check
 /// <reference types="chromecast-caf-sender" />
 
 function __onGCastApiAvailable(isAvailable, ...details) {
@@ -30,7 +31,7 @@ function __onGCastApiAvailable(isAvailable, ...details) {
 
 class CastManager {
     /** @type CastManager? */
-    static instance = undefined;
+    static instance = null;
     static getInstance() {
         CastManager.instance ??= new CastManager();
         return CastManager.instance;
@@ -94,22 +95,22 @@ class CastManager {
     /**
      * Load give media into the session.
      * @param {string} url The URL to load from. 
+     * @param {object} metadata Metadata about the media to play.
+     * @param {string} metadata.title The media title.
      */
-    async loadMedia(url) {
+    async loadMedia(url, metadata) {
         try {
             console.debug(`Loading media ${ url }...`);
             let mediaInfo = new chrome.cast.media.MediaInfo(url, "application/dash+xml");
+            mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
+            mediaInfo.metadata.title = metadata?.title || "Unknown Video";
             console.debug('Using media info', mediaInfo);
             let request = new chrome.cast.media.LoadRequest(mediaInfo);
             request.autoplay = true;
-            request.currentTime = 0;
             console.debug('Created load request', request);
-            console.log('Using session', this.session, this.session.loadMedia);
-            let media = await new Promise((resolve, reject) => {
-                this.session.getSessionObj().loadMedia(request, resolve, reject);
-                console.log('load session running...');
-            });
-            console.log('got media', media);
+            console.log('Using session', this.session, this.session?.loadMedia);
+            let error = await this.session?.loadMedia(request);
+            console.debug('Got error', error);
         } catch (ex) {
             console.error('Failed to load media', url, ex);
             throw ex;
@@ -123,7 +124,8 @@ class CastManager {
      * @param {PointerEvent} event 
      */
     async handleLink(event) {
-        const linkURL = new URL(event.target.href, location.href);
+        const target = /** @type HTMLAnchorElement */(event.target);
+        const linkURL = new URL(target.href, location.href);
 
         if (!linkURL.pathname.startsWith('/v/')) {
             console.debug(`Ignoring unexpected link ${linkURL.pathname}`);
@@ -131,8 +133,10 @@ class CastManager {
         }
         event.preventDefault();
 
+        const title = target.innerText.trim().replace(/\..{0,4}$/, '');
+
         try {
-            await this.loadMedia(linkURL.href);
+            await this.loadMedia(linkURL.href, {title});
             console.debug(`Played ${ linkURL.href }`);
         } catch (ex) {
             console.error(`Failed to load media ${ linkURL }:`, ex);
@@ -148,8 +152,8 @@ class CastManager {
         if (event.castState !== cast.framework.CastState.CONNECTED) {
             // If the cast state is no longer connected, drop the things that
             // depend on it.
-            this._player = undefined;
-            this._controller = undefined;
+            this._player = null;
+            this._controller = null;
         }
     }
 
