@@ -34,22 +34,32 @@
             border-bottom: 1px solid var(--color-foreground);
             position: sticky;
             top: 0;
-            height: 7vw;
+            height: 159px;
             overflow: hidden;
+            background: var(--color-background);
           }
           ul {
             list-style: none;
             margin: 0;
-            padding: 0 0.5em;
+            padding: 0;
           }
           li {
-            height: 128px;
             overflow: hidden;
-            border-bottom: 1px solid color-mix(in hsl, var(--color-dimmed) 60%, transparent);
+            border: 1px solid color-mix(in hsl, var(--color-dimmed) 60%, transparent);
+            border-width: 1px 0;
+            padding: 0.5em;
+          }
+          .directories li {
+            height: 318px;
+          }
+          .files li {
+            height: 159px;
+            cursor: pointer;
           }
 
           :any-link {
             color: inherit;
+            text-decoration: none;
           }
           li[data-seen] {
             color: var(--color-dimmed);
@@ -57,7 +67,7 @@
         </style>
         <script>
           function seen(event) {
-            const target = event.target.closest("li");
+            const { target } = event;
             const name = target.getAttribute("data-name");
             const seen = target.hasAttribute("data-seen");
             fetch(`/m{{ $.Path }}/${ name }?${ !seen }`, {
@@ -80,17 +90,21 @@
             <a href="..">{{ $.Name }}</a>
           {{ end }}
         </header>
-        <ul>
+        <ul class="directories">
             {{ range $.Directories }}
             <li {{ if .Seen }} data-seen="true" {{ end }} >
               <a href="/l{{ $.Path }}/{{ .Name }}/">{{ .Name }}</a>
             </li>
             {{ end }}
         </ul>
-        <ul>
+        <ul class="files">
             {{ range $.Files }}
-            <li {{ if .Seen }} data-seen="true" {{ end }} data-name="{{ .Name }}">
-              <a href="javascript:" onclick="seen(event)">{{ .Name }}</a>
+            <li
+              {{ if .Seen }} data-seen="true" {{ end }}
+              data-name="{{ .Name }}"
+              onclick="seen(event)"
+              >
+              {{ .Title }}
             </li>
             {{ end }}
         </ul>

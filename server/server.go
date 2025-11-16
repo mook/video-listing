@@ -72,9 +72,3 @@ func (s *server) getPath(w http.ResponseWriter, req *http.Request, isDir bool) (
 
 	return fullPath, nil
 }
-
-// directoryEntry describes one entry in the listing.
-type directoryEntry struct {
-	Name string
-	Seen bool
-}
