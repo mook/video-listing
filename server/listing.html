@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>{{ $.Name }}</title>
+        <link href="data:text/plain," rel="icon">
+        <style>
+          :root {
+            --color-foreground: #111;
+            --color-dimmed: #666;
+            --color-background: #eee;
+          }
+
+          @media (prefers-color-scheme: dark) {
+            :root {
+              --color-foreground: #eee;
+              --color-dimmed: #666;
+              --color-background: #111;
+            }
+          }
+
+          :root {
+            color: var(--color-foreground);
+            background: var(--color-background);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 5vw;
+            margin: 0;
+          }
+          body {
+            margin: 0;
+          }
+          header {
+            padding: 0.5em;
+            font-weight: bold;
+            border-bottom: 1px solid var(--color-foreground);
+            position: sticky;
+            top: 0;
+            height: 7vw;
+            overflow: hidden;
+          }
+          ul {
+            list-style: none;
+            margin: 0;
+            padding: 0 0.5em;
+          }
+          li {
+            height: 128px;
+            overflow: hidden;
+            border-bottom: 1px solid color-mix(in hsl, var(--color-dimmed) 60%, transparent);
+          }
+
+          :any-link {
+            color: inherit;
+          }
+          li[data-seen] {
+            color: var(--color-dimmed);
+          }
+        </style>
+        <script>
+          function seen(event) {
+            const target = event.target.closest("li");
+            const name = target.getAttribute("data-name");
+            const seen = target.hasAttribute("data-seen");
+            fetch(`/m{{ $.Path }}/${ name }?${ !seen }`, {
+              method: 'POST',
+            }).then(() => {
+              if (seen) {
+                target.removeAttribute("data-seen");
+              } else {
+                target.setAttribute("data-seen", true);
+              }
+            }).catch(ex => console.error(ex));
+          }
+        </script>
+    </head>
+    <body>
+        <header>
+          {{ if eq .Path "." }}
+            Video Listing
+          {{ else }}
+            <a href="..">{{ $.Name }}</a>
+          {{ end }}
+        </header>
+        <ul>
+            {{ range $.Directories }}
+            <li {{ if .Seen }} data-seen="true" {{ end }} >
+              <a href="/l{{ $.Path }}/{{ .Name }}/">{{ .Name }}</a>
+            </li>
+            {{ end }}
+        </ul>
+        <ul>
+            {{ range $.Files }}
+            <li {{ if .Seen }} data-seen="true" {{ end }} data-name="{{ .Name }}">
+              <a href="javascript:" onclick="seen(event)">{{ .Name }}</a>
+            </li>
+            {{ end }}
+        </ul>
+    </body>
+</html>
