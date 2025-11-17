@@ -55,6 +55,8 @@ func ReadInfo(directory string) (*InfoType, error) {
 		Injested: make(map[string]time.Time),
 		mtimes:   make(map[string]time.Time),
 	}
+	migrate := false
+	migratingSeen := make(map[string]bool)
 	f, err := os.Open(infoPath)
 	if err == nil {
 		defer f.Close()
@@ -63,6 +65,8 @@ func ReadInfo(directory string) (*InfoType, error) {
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
+	} else {
+		migrate = true
 	}
 
 	entries, err := os.ReadDir(directory)
@@ -73,6 +77,10 @@ func ReadInfo(directory string) (*InfoType, error) {
 
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".") {
+			if migrate && strings.HasSuffix(entry.Name(), ".seen") {
+				name := entry.Name()[1 : len(entry.Name())-5]
+				migratingSeen[name] = true
+			}
 			continue
 		}
 		if entry.IsDir() {
@@ -95,6 +103,14 @@ func ReadInfo(directory string) (*InfoType, error) {
 			seen[entry.Name()] = true
 			if stat, err := entry.Info(); err == nil {
 				info.mtimes[entry.Name()] = stat.ModTime()
+			}
+		}
+	}
+
+	if migrate {
+		for name := range info.Seen {
+			if migratingSeen[name] {
+				info.Seen[name] = true
 			}
 		}
 	}
