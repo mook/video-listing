@@ -1,7 +1,7 @@
 FROM alpine:edge AS builder
 WORKDIR /go/src/video-listing
 RUN --mount=type=cache,target=/var/cache/apk \
-    apk add -U go
+    apk add -U ca-certificates go
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     go mod download && go mod verify
@@ -13,6 +13,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     go build -v -o /go/video-listing .
 
 FROM scratch
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /go/video-listing /video-listing
 VOLUME [ "/media" ]
 ENTRYPOINT [ "/video-listing" ]

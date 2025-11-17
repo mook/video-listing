@@ -85,6 +85,10 @@ func ReadInfo(directory string) (*InfoType, error) {
 			continue
 		}
 		if entry.IsDir() {
+			if name == "@eaDir" {
+				delete(info.Injested, name)
+				continue
+			}
 			if _, ok := info.Injested[name]; !ok {
 				info.Injested[name] = time.Time{}
 				info.changed = true
