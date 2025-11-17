@@ -49,8 +49,22 @@
             border-width: 1px 0;
             padding: 0.5em;
           }
-          .directories li {
-            height: 318px;
+          .directories li picture {
+            float: left;
+            width: 100px;
+            height: 138px;
+            margin-right: 0.5em;
+          }
+          .directories li picture img {
+            object-position: 50% 50%;
+            object-fit: contain;
+          }
+          .translation {
+            font-size: 70%;
+            color: var(--color-dimmed);
+          }
+          .translation:empty {
+            display: none;
           }
           .files li {
             height: 159px;
@@ -83,18 +97,32 @@
         </script>
     </head>
     <body>
-        <header>
-          {{ if eq .Path "." }}
-            Video Listing
-          {{ else }}
-            <a href="..">{{ $.Name }}</a>
-          {{ end }}
-        </header>
+        <a
+          {{ if .Path }} href=".." {{ end }}
+        >
+          <header>
+              <div class="title">{{ $.Name }}</div>
+              <div class="translation native">{{ $.Native }}</div>
+              <div class="translation english">{{ $.English }}</div>
+          </header>
+        </a>
         <ul class="directories">
             {{ range $.Directories }}
-            <li {{ if .Seen }} data-seen="true" {{ end }} >
-              <a href="/l{{ $.Path }}/{{ .Name }}/">{{ .Name }}</a>
-            </li>
+            <a href="/l{{ .EscapedFullPath }}/">
+              <li {{ if .Seen }} data-seen="true" {{ end }} >
+                <picture>
+                  <source srcset="/i{{ .EscapedFullPath }}" />
+                  <source media="(prefers-color-scheme: light)"
+                    srcset="/i/fallback.svg?666" />
+                  <source media="(prefers-color-scheme: dark)"
+                    srcset="/i/fallback.svg?666" />
+                  <img src="/i/fallback.svg">
+                </picture>
+                <div class="title">{{ .Name }}</div>
+                <div class="translation native">{{ .Native }}</div>
+                <div class="translation english">{{ .English }}</div>
+              </li>
+            </a>
             {{ end }}
         </ul>
         <ul class="files">

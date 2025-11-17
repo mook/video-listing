@@ -1,18 +1,18 @@
 package server
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
-	"os"
+	"net/url"
 	"path"
+	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/mook/video-listing/injest"
 	"github.com/sirupsen/logrus"
 )
-
-var excludedNames = map[string]struct{}{
-	"Thumbs.db": {},
-}
 
 // commonLength returns the length of the longest common prefix or suffix for a
 // slice of strings; note that the slice will be modified.
@@ -48,6 +48,10 @@ func commonLength(strings []string, isPrefix bool) int {
 type directoryInput struct {
 	// The base name of the child directory.
 	Name string
+	// The full path from the root, URL escaped.
+	EscapedFullPath string
+	Native          string
+	English         string
 	// Whether this directory has been completely seen.
 	Seen bool
 }
@@ -63,7 +67,9 @@ type fileInput struct {
 
 type templateInput struct {
 	// The base name of the current directory.
-	Name string
+	Name    string
+	Native  string
+	English string
 	// The full path to the current directory.
 	Path        string
 	Directories []directoryInput
@@ -82,7 +88,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	entries, err := os.ReadDir(fullPath)
+	info, err := injest.ReadInfo(fullPath)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		logrus.WithError(err).WithField("path", fullPath).Error("Error reading directory")
@@ -91,31 +97,44 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 	}
 
 	input := templateInput{
-		Name: path.Base(fullPath),
-		Path: "/" + strings.Trim(req.URL.Path, "/"),
+		Name:    path.Base(fullPath),
+		Native:  info.NativeTitle,
+		English: info.EnglishTitle,
+		Path:    "/" + strings.Trim(req.URL.Path, "/"),
 	}
 
-	for _, entry := range entries {
-		if _, found := excludedNames[entry.Name()]; found {
-			continue
+	pathParts := strings.Split(input.Path, "/")[1:]
+	escapedPathParts := make([]string, 0, len(pathParts))
+	for _, p := range pathParts {
+		escapedPathParts = append(escapedPathParts, url.PathEscape(p))
+	}
+
+	for directory := range info.Injested {
+		child := directoryInput{
+			Name:            directory,
+			EscapedFullPath: strings.Join(append(slices.Clone(escapedPathParts), url.PathEscape(directory)), "/"),
 		}
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
+		childInfo, err := injest.ReadInfo(filepath.Join(fullPath, directory))
+		if err == nil {
+			child.Native = childInfo.NativeTitle
+			child.English = childInfo.EnglishTitle
+			child.Seen = true
+			for _, childSeen := range childInfo.Seen {
+				child.Seen = child.Seen && childSeen
+			}
 		}
-		if entry.IsDir() {
-			_, err = os.Stat(path.Join(fullPath, entry.Name(), ".seen"))
-			input.Directories = append(input.Directories, directoryInput{
-				Name: entry.Name(),
-				Seen: err == nil,
-			})
-		} else if entry.Type().IsRegular() {
-			_, err = os.Stat(path.Join(fullPath, fmt.Sprintf(".%s.seen", entry.Name())))
-			input.Files = append(input.Files, fileInput{
-				Name:  entry.Name(),
-				Title: entry.Name(),
-				Seen:  err == nil,
-			})
-		}
+		input.Directories = append(input.Directories, child)
+	}
+	slices.SortFunc(input.Directories, func(a, b directoryInput) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	for file, seen := range info.Seen {
+		input.Files = append(input.Files, fileInput{
+			Name:  file,
+			Title: file,
+			Seen:  seen,
+		})
 	}
 
 	// Post process: Strip common prefix and suffix of the strings
@@ -130,6 +149,10 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 			input.Files[i].Title = input.Files[i].Title[prefixLen : len(input.Files[i].Title)-suffixLen]
 		}
 	}
+	slices.SortFunc(input.Files, func(a, b fileInput) int {
+		return cmp.Compare(a.Title, b.Title)
+	})
+
 	if strings.Trim(req.URL.Path, "/") == "" {
 		input.Path = "" // Avoid double slash in URL
 	}

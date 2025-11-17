@@ -1,14 +1,12 @@
 package server
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
-	"os"
 	"path"
 	"strconv"
 
+	"github.com/mook/video-listing/injest"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,31 +25,31 @@ func (s *server) ServeMark(w http.ResponseWriter, req *http.Request) {
 	state, err := strconv.ParseBool(req.URL.RawQuery)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		_, err := fmt.Fprintf(w, `Invalid new state %q`, req.URL.RawQuery)
 		logrus.WithError(err).Debug("Invalid client request query")
+		_, _ = fmt.Fprintf(w, `Invalid new state %q`, req.URL.RawQuery)
 		return
 	}
 
 	dir, base := path.Split(fullPath)
-	base = fmt.Sprintf(".%s.seen", base)
-	fullPath = path.Join(dir, base)
-	if state {
-		if f, err := os.Create(fullPath); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			logrus.WithError(err).WithField("path", fullPath).Error("Failed to create marker file")
-			_, _ = fmt.Fprintf(w, `Failed to create marker for "%s"`, req.URL.Path)
-			return
-		} else {
-			_ = f.Close()
-			logrus.WithField("path", fullPath).Debug("File marked as seen")
-		}
-	} else {
-		if err := os.Remove(fullPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			w.WriteHeader(http.StatusInternalServerError)
-			logrus.WithError(err).WithField("path", fullPath).Error("Failed to remove marker file")
-			_, _ = fmt.Fprintf(w, `Failed to remove marker for "%s"`, req.URL.Path)
-			return
-		}
-		logrus.WithField("path", fullPath).Debug("File marked as not seen")
+	info, err := injest.ReadInfo(dir)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logrus.WithError(err).Debug("Error reading state")
+		_, _ = fmt.Fprintf(w, `Error reading state`)
+		return
+	}
+	if _, ok := info.Seen[base]; !ok {
+		w.WriteHeader(http.StatusNotFound)
+		logrus.WithError(err).Debug("Writing state for invalid file")
+		return
+	}
+
+	info.Seen[base] = state
+
+	if err := injest.WriteInfo(dir, info); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logrus.WithError(err).Debug("Error writing state")
+		_, _ = fmt.Fprintf(w, `Error writing state`)
+		return
 	}
 }

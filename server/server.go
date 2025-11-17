@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -21,15 +22,21 @@ var tmpl = template.Must(template.New("listing.html").Parse(templateText))
 // server is the main structure for the server; individual paths are in their
 // own files.
 type server struct {
-	root string
+	root        string
+	colorRegexp *regexp.Regexp
 }
 
 func NewServer(root string) http.Handler {
-	s := &server{root: root}
+	s := &server{
+		root:        root,
+		colorRegexp: regexp.MustCompile(`^[0-9a-f]{3}$`),
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/l/", http.StripPrefix("/l", http.HandlerFunc(s.ServeListing)))
+	mux.Handle("GET /l/", http.StripPrefix("/l", http.HandlerFunc(s.ServeListing)))
 	mux.Handle("POST /m/", http.StripPrefix("/m", http.HandlerFunc(s.ServeMark)))
-	mux.Handle("/{$}", http.RedirectHandler("/l/", http.StatusFound))
+	mux.Handle("GET /i/fallback.svg", http.HandlerFunc(s.ServeFallbackIcon))
+	mux.Handle("GET /i/", http.StripPrefix("/i", http.HandlerFunc(s.ServeImage)))
+	mux.Handle("GET /{$}", http.RedirectHandler("/l/", http.StatusFound))
 
 	return mux
 }

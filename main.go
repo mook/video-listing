@@ -25,10 +25,49 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 
+	"github.com/mook/video-listing/injest"
 	"github.com/mook/video-listing/server"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
+
+func serve(ctx context.Context, mediaDir string) error {
+	s := server.NewServer(mediaDir)
+
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+os.Getenv("PORT"))
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+
+	fmt.Printf("Listening on %s...\n", listener.Addr())
+	if err = http.Serve(listener, s); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	return nil
+}
+
+func doInjest(ctx context.Context, mediaDir string) error {
+	injester := injest.New(mediaDir)
+	var wg sync.WaitGroup
+	var err error
+	wg.Go(func() {
+		err = injester.Run(ctx)
+	})
+	wg.Go(func() {
+		time.Sleep(time.Millisecond)
+		injester.Queue(".")
+	})
+	wg.Wait()
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func run(ctx context.Context) error {
 	mediaDir := flag.String("dir", "/media", "listing directory root")
@@ -45,19 +84,17 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("Media directory %s is not a directory", *mediaDir)
 	}
 
-	s := server.NewServer(*mediaDir)
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return serve(ctx, *mediaDir)
+	})
+	wg.Go(func() error {
+		return doInjest(ctx, *mediaDir)
+	})
 
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+os.Getenv("PORT"))
-	if err != nil {
+	if err := wg.Wait(); err != nil {
 		return err
 	}
-	defer listener.Close()
-
-	fmt.Printf("Listening on %s...\n", listener.Addr())
-	if err = http.Serve(listener, s); !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-
 	return nil
 }
 
