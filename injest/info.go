@@ -76,33 +76,34 @@ func ReadInfo(directory string) (*InfoType, error) {
 	seen := make(map[string]bool)
 
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
-			if migrate && strings.HasSuffix(entry.Name(), ".seen") {
-				name := entry.Name()[1 : len(entry.Name())-5]
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			if migrate && len(name) > 5 && strings.HasSuffix(name, ".seen") {
+				name := name[1 : len(name)-5]
 				migratingSeen[name] = true
 			}
 			continue
 		}
 		if entry.IsDir() {
-			if _, ok := info.Injested[entry.Name()]; !ok {
-				info.Injested[entry.Name()] = time.Time{}
+			if _, ok := info.Injested[name]; !ok {
+				info.Injested[name] = time.Time{}
 				info.changed = true
 			}
-			seen[entry.Name()] = true
+			seen[name] = true
 			if stat, err := entry.Info(); err == nil {
-				info.mtimes[entry.Name()] = stat.ModTime()
+				info.mtimes[name] = stat.ModTime()
 			}
 		} else if entry.Type().IsRegular() {
-			if _, ok := mediaExtensions[strings.ToLower(filepath.Ext(entry.Name()))]; !ok {
+			if _, ok := mediaExtensions[strings.ToLower(filepath.Ext(name))]; !ok {
 				continue // Not a media file
 			}
-			if _, ok := info.Seen[entry.Name()]; !ok {
-				info.Seen[entry.Name()] = false
+			if _, ok := info.Seen[name]; !ok {
+				info.Seen[name] = false
 				info.changed = true
 			}
-			seen[entry.Name()] = true
+			seen[name] = true
 			if stat, err := entry.Info(); err == nil {
-				info.mtimes[entry.Name()] = stat.ModTime()
+				info.mtimes[name] = stat.ModTime()
 			}
 		}
 	}

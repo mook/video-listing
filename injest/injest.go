@@ -56,24 +56,28 @@ func (i *Injester) injest(ctx context.Context, directory string) error {
 	directories := make(map[string]time.Time)
 	var files []string
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
 			continue // Skip hidden files and directories.
 		}
 		info, err := entry.Info()
 		if err != nil {
-			log.WithError(err).WithField("entry", entry.Name()).Error("Failed to read directory info")
+			log.WithError(err).WithField("entry", name).Error("Failed to read directory info")
 			continue
 		}
 		if entry.IsDir() {
-			directories[entry.Name()] = info.ModTime()
+			if name == "@eaDir" {
+				continue
+			}
+			directories[name] = info.ModTime()
 			if info.ModTime().After(lastTime) {
 				lastTime = info.ModTime()
 			}
 		} else if entry.Type().IsRegular() {
-			if _, ok := mediaExtensions[strings.ToLower(filepath.Ext(entry.Name()))]; !ok {
+			if _, ok := mediaExtensions[strings.ToLower(filepath.Ext(name))]; !ok {
 				continue // Not a media file
 			}
-			files = append(files, entry.Name())
+			files = append(files, name)
 			if info.ModTime().After(lastTime) {
 				lastTime = info.ModTime()
 			}
