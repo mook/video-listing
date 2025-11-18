@@ -49,15 +49,14 @@
             border-width: 1px 0;
             padding: 0.5em;
           }
-          .directories li picture {
+          .directories li object {
             float: left;
             width: 100px;
             height: 138px;
             margin-right: 0.5em;
           }
-          .directories li picture img {
-            object-position: 50% 50%;
-            object-fit: contain;
+          .directories li object picture img {
+            width: 100%;
           }
           .translation {
             font-size: 70%;
@@ -82,9 +81,9 @@
         <script>
           function seen(event) {
             const { target } = event;
-            const name = target.getAttribute("data-name");
+            const path = target.getAttribute("data-path");
             const seen = target.hasAttribute("data-seen");
-            fetch(`/m{{ $.Path }}/${ name }?${ !seen }`, {
+            fetch(`/m/${ path }?${ !seen }`, {
               method: 'POST',
             }).then(() => {
               if (seen) {
@@ -108,16 +107,21 @@
         </a>
         <ul class="directories">
             {{ range $.Directories }}
-            <a href="/l{{ .EscapedFullPath }}/">
+            <a href="/l/{{ .EscapedFullPath }}/">
               <li {{ if .Seen }} data-seen="true" {{ end }} >
-                <picture>
-                  <source srcset="/i{{ .EscapedFullPath }}" />
-                  <source media="(prefers-color-scheme: light)"
-                    srcset="/i/fallback.svg?666" />
-                  <source media="(prefers-color-scheme: dark)"
-                    srcset="/i/fallback.svg?666" />
-                  <img src="/i/fallback.svg">
-                </picture>
+                {{ if .HasMedia }}
+                  <object data="/i/{{ .EscapedFullPath }}" type="image/jpeg">
+                    <picture>
+                      <source media="(prefers-color-scheme: light)"
+                        srcset="/i/fallback.svg?666" />
+                      <source media="(prefers-color-scheme: dark)"
+                        srcset="/i/fallback.svg?222" />
+                      <img src="/i/fallback.svg">
+                    </picture>
+                  </object>
+                {{ else }}
+                  <object><!-- exists only for layout --></object>
+                {{ end }}
                 <div class="title">{{ .Name }}</div>
                 <div class="translation native">{{ .Native }}</div>
                 <div class="translation english">{{ .English }}</div>
@@ -129,7 +133,7 @@
             {{ range $.Files }}
             <li
               {{ if .Seen }} data-seen="true" {{ end }}
-              data-name="{{ .Name }}"
+              data-path="{{ .EscapedFullPath }}"
               onclick="seen(event)"
               >
               {{ .Title }}

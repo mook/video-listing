@@ -76,6 +76,8 @@ func run(ctx context.Context) error {
 
 	if *verbose {
 		logrus.SetLevel(logrus.DebugLevel)
+	} else {
+		logrus.SetLevel(logrus.WarnLevel)
 	}
 
 	if info, err := os.Stat(*mediaDir); err != nil {

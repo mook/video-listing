@@ -50,6 +50,7 @@ type directoryInput struct {
 	Name string
 	// The full path from the root, URL escaped.
 	EscapedFullPath string
+	HasMedia        bool
 	Native          string
 	English         string
 	// Whether this directory has been completely seen.
@@ -58,7 +59,8 @@ type directoryInput struct {
 
 type fileInput struct {
 	// The base name of the file.
-	Name string
+	Name            string
+	EscapedFullPath string
 	// The short title of the file.
 	Title string
 	// Whether this file has been seen.
@@ -100,13 +102,14 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		Name:    path.Base(fullPath),
 		Native:  info.NativeTitle,
 		English: info.EnglishTitle,
-		Path:    "/" + strings.Trim(req.URL.Path, "/"),
+		Path:    strings.Trim(req.URL.Path, "/"),
 	}
 
-	pathParts := strings.Split(input.Path, "/")[1:]
-	escapedPathParts := make([]string, 0, len(pathParts))
-	for _, p := range pathParts {
-		escapedPathParts = append(escapedPathParts, url.PathEscape(p))
+	var escapedPathParts []string
+	for p := range strings.SplitSeq(input.Path, "/") {
+		if p != "" {
+			escapedPathParts = append(escapedPathParts, url.PathEscape(p))
+		}
 	}
 
 	for directory := range info.Injested {
@@ -116,6 +119,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		}
 		childInfo, err := injest.ReadInfo(filepath.Join(fullPath, directory))
 		if err == nil {
+			child.HasMedia = len(childInfo.Seen) > 0
 			child.Native = childInfo.NativeTitle
 			child.English = childInfo.EnglishTitle
 			child.Seen = true
@@ -131,9 +135,10 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 
 	for file, seen := range info.Seen {
 		input.Files = append(input.Files, fileInput{
-			Name:  file,
-			Title: file,
-			Seen:  seen,
+			Name:            file,
+			EscapedFullPath: path.Join(append(slices.Clone(escapedPathParts), file)...),
+			Title:           file,
+			Seen:            seen,
 		})
 	}
 
@@ -161,5 +166,5 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		logrus.WithError(err).Error("Failed to render template")
 	}
-	logrus.WithField("input", input).Debug("Template rendered")
+	logrus.Debugf("Template rendered: %+v", input)
 }
