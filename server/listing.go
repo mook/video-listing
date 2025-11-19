@@ -51,8 +51,7 @@ type directoryInput struct {
 	// The full path from the root, URL escaped.
 	EscapedFullPath string
 	HasMedia        bool
-	Native          string
-	English         string
+	Translations    []string
 	// Whether this directory has been completely seen.
 	Seen bool
 }
@@ -68,12 +67,7 @@ type fileInput struct {
 }
 
 type templateInput struct {
-	// The base name of the current directory.
-	Name    string
-	Native  string
-	English string
-	// The full path to the current directory.
-	Path        string
+	directoryInput
 	Directories []directoryInput
 	Files       []fileInput
 }
@@ -98,30 +92,34 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	input := templateInput{
-		Name:    path.Base(fullPath),
-		Native:  info.NativeTitle,
-		English: info.EnglishTitle,
-		Path:    strings.Trim(req.URL.Path, "/"),
-	}
-
 	var escapedPathParts []string
-	for p := range strings.SplitSeq(input.Path, "/") {
+	for p := range strings.SplitSeq(strings.Trim(req.URL.Path, "/"), "/") {
 		if p != "" {
 			escapedPathParts = append(escapedPathParts, url.PathEscape(p))
 		}
+	}
+	input := templateInput{
+		directoryInput: directoryInput{
+			Name:            path.Base(fullPath),
+			EscapedFullPath: path.Join(escapedPathParts...),
+			HasMedia:        len(info.Seen) > 0,
+			Translations:    []string{info.NativeTitle, info.ChineseTitle, info.EnglishTitle},
+		},
 	}
 
 	for directory := range info.Injested {
 		child := directoryInput{
 			Name:            directory,
-			EscapedFullPath: strings.Join(append(slices.Clone(escapedPathParts), url.PathEscape(directory)), "/"),
+			EscapedFullPath: path.Join(input.EscapedFullPath, url.PathEscape(directory)),
 		}
 		childInfo, err := injest.ReadInfo(filepath.Join(fullPath, directory))
 		if err == nil {
 			child.HasMedia = len(childInfo.Seen) > 0
-			child.Native = childInfo.NativeTitle
-			child.English = childInfo.EnglishTitle
+			child.Translations = []string{
+				childInfo.NativeTitle,
+				childInfo.ChineseTitle,
+				childInfo.EnglishTitle,
+			}
 			child.Seen = true
 			for _, childSeen := range childInfo.Seen {
 				child.Seen = child.Seen && childSeen
@@ -157,10 +155,6 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 	slices.SortFunc(input.Files, func(a, b fileInput) int {
 		return cmp.Compare(a.Title, b.Title)
 	})
-
-	if strings.Trim(req.URL.Path, "/") == "" {
-		input.Path = "" // Avoid double slash in URL
-	}
 
 	err = tmpl.Execute(w, input)
 	if err != nil {

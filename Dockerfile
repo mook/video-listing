@@ -1,7 +1,7 @@
 FROM alpine:edge AS builder
 WORKDIR /go/src/video-listing
 RUN --mount=type=cache,target=/var/cache/apk \
-    apk add -U ca-certificates go
+    apk add -U ca-certificates git go
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     go mod download && go mod verify

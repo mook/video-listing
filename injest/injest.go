@@ -128,6 +128,8 @@ func (i *Injester) injest(ctx context.Context, directory string) error {
 		if err != nil {
 			return err
 		}
+	} else {
+		log.Debugf("Skipping unchanged info: %+v", info)
 	}
 
 	return nil

@@ -49,7 +49,7 @@
             border-width: 1px 0;
             padding: 0.5em;
           }
-          .directories li object {
+          .thumb {
             float: left;
             width: 100px;
             height: 138px;
@@ -62,7 +62,7 @@
             font-size: 70%;
             color: var(--color-dimmed);
           }
-          .translation:empty {
+          .thumb ~ :nth-child(n + 3 of .translation) {
             display: none;
           }
           .files li {
@@ -96,35 +96,40 @@
         </script>
     </head>
     <body>
+      {{ define "directoryContents" }}
+        <object class="thumb"
+          {{ if .HasMedia }}
+            data="/i/{{ .EscapedFullPath }}" type="image/jpeg">
+            <picture>
+              <source media="(prefers-color-scheme: light)"
+                srcset="/i/fallback.svg?666" />
+              <source media="(prefers-color-scheme: dark)"
+                srcset="/i/fallback.svg?222" />
+              <img src="/i/fallback.svg">
+            </picture>
+          {{ else }}
+            ><!-- exists only for layout -->
+          {{ end }}
+        </object>
+        <div class="title">{{ .Name }}</div>
+        {{ range .Translations }}
+          {{ if . }}
+            <div class="translation">{{ . }}</div>
+          {{ end }}
+        {{ end }}
+      {{ end }}
         <a
-          {{ if .Path }} href=".." {{ end }}
+          {{ if .EscapedFullPath }} href=".." {{ end }}
         >
           <header>
-              <div class="title">{{ $.Name }}</div>
-              <div class="translation native">{{ $.Native }}</div>
-              <div class="translation english">{{ $.English }}</div>
+          {{ template "directoryContents" . }}
           </header>
         </a>
         <ul class="directories">
             {{ range $.Directories }}
             <a href="/l/{{ .EscapedFullPath }}/">
               <li {{ if .Seen }} data-seen="true" {{ end }} >
-                {{ if .HasMedia }}
-                  <object data="/i/{{ .EscapedFullPath }}" type="image/jpeg">
-                    <picture>
-                      <source media="(prefers-color-scheme: light)"
-                        srcset="/i/fallback.svg?666" />
-                      <source media="(prefers-color-scheme: dark)"
-                        srcset="/i/fallback.svg?222" />
-                      <img src="/i/fallback.svg">
-                    </picture>
-                  </object>
-                {{ else }}
-                  <object><!-- exists only for layout --></object>
-                {{ end }}
-                <div class="title">{{ .Name }}</div>
-                <div class="translation native">{{ .Native }}</div>
-                <div class="translation english">{{ .English }}</div>
+                {{ template "directoryContents" . }}
               </li>
             </a>
             {{ end }}

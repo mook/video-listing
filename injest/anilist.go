@@ -60,18 +60,35 @@ type aniListResponse struct {
 	} `json:"data"`
 }
 
+const wikiDataEndpoint = "https://query.wikidata.org/sparql"
+const wikiDataQuery = `
+SELECT ?label WHERE {
+  ?item p:P8729/ps:P8729 "%d".
+  ?item rdfs:label ?label.
+  FILTER(LANG(?label) = "zh")
+}
+`
+
+type wikiDataResponse struct {
+	Results struct {
+		Bindings []map[string]struct {
+			Value string `json:"value"`
+		} `json:"bindings"`
+	} `json:"results"`
+}
+
 // requestInfo makes a request to AniList and returns the relevant information.
 // This handles rate limiting by artificially extending the function runtime.
 // Returns whether any changes were made.
 func (i *Injester) requestInfo(ctx context.Context, directory string, info *InfoType) error {
-	if info.AniListID != 0 {
+	log := logrus.WithField("directory", directory)
+	if info.AniListID != 0 && info.Version == version {
 		// We already fetched what we can from AniList, skip.
 		return nil
 	}
 	// We rate limit our calls to once every ten seconds, way more than AniList's
 	// stated rate limit of 30 requests per minute.
 	timeout := time.After(10 * time.Second)
-	log := logrus.WithField("directory", directory)
 	err := func() error {
 		log.Debug("Requesting info from AniList...")
 		input := aniListRequest{
@@ -89,7 +106,8 @@ func (i *Injester) requestInfo(ctx context.Context, directory string, info *Info
 		if err != nil {
 			return err
 		}
-		req.Header.Add("Content-Type", "application/json")
+		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return err
@@ -136,6 +154,7 @@ func (i *Injester) requestInfo(ctx context.Context, directory string, info *Info
 				if err != nil {
 					return err
 				}
+				req.Header.Set("User-Agent", userAgent)
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
 					return err
@@ -151,6 +170,37 @@ func (i *Injester) requestInfo(ctx context.Context, directory string, info *Info
 				_ = f.Close()
 			}
 		}
+
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, wikiDataEndpoint, http.NoBody)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("Accept", "application/sparql-results+json")
+		q := req.URL.Query()
+		q.Set("query", fmt.Sprintf(wikiDataQuery, info.AniListID))
+		req.URL.RawQuery = q.Encode()
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		log.WithField("url", req.URL).Debug("Sent wikidata request")
+		if resp.StatusCode == http.StatusOK {
+			if resp.Body == nil {
+				return fmt.Errorf("failed to get wikidata response body")
+			}
+			defer resp.Body.Close()
+			var output wikiDataResponse
+			if err := json.NewDecoder(resp.Body).Decode(&output); err != nil {
+				return fmt.Errorf("failed to parse wikidata response: %w", err)
+			}
+			log.Debugf("Got WikiData resposne: %+v", output)
+			for _, binding := range output.Results.Bindings {
+				info.ChineseTitle = binding["label"].Value
+				break
+			}
+		}
+
 		return nil
 	}()
 	log.WithError(err).WithField("info", info).Debug("Requested info from AniList")
