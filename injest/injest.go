@@ -104,7 +104,7 @@ func (d *injestDirectory) Process(ctx context.Context) error {
 		}
 	}
 
-	info, err := ReadInfo(d.absPath)
+	info, err := ReadInfo(d.absPath, true)
 	log.WithError(err).WithField("info", info).Debug("Read existing info")
 	if err != nil {
 		return err

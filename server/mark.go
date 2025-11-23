@@ -38,7 +38,7 @@ func (s *server) ServeMark(w http.ResponseWriter, req *http.Request) {
 	}
 
 	dir, base := path.Split(fullPath)
-	info, err := injest.ReadInfo(dir)
+	info, err := injest.ReadInfo(dir, false)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		logrus.WithError(err).Debug("Error reading state")

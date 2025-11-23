@@ -51,7 +51,7 @@ type InfoType struct {
 // ReadInfo reads the saved information from a directory, given as the absolute
 // path.  It is not an error if the saved info does not exist.  The Seen and
 // Injested maps are filled to contain zero values.
-func ReadInfo(directory string) (*InfoType, error) {
+func ReadInfo(directory string, update bool) (*InfoType, error) {
 	infoPath := filepath.Join(directory, infoBaseName)
 	info := InfoType{
 		Seen:     make(map[string]bool),
@@ -70,6 +70,10 @@ func ReadInfo(directory string) (*InfoType, error) {
 		return nil, err
 	} else {
 		migrate = true
+	}
+
+	if !update && !migrate {
+		return &info, nil
 	}
 
 	entries, err := os.ReadDir(directory)

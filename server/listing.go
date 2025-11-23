@@ -94,7 +94,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	info, err := injest.ReadInfo(fullPath)
+	info, err := injest.ReadInfo(fullPath, true)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		logrus.WithError(err).WithField("path", fullPath).Error("Error reading directory")
@@ -128,7 +128,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 				EscapedFullPath: path.Join(input.EscapedFullPath, url.PathEscape(directory)),
 			},
 		}
-		childInfo, err := injest.ReadInfo(filepath.Join(fullPath, directory))
+		childInfo, err := injest.ReadInfo(filepath.Join(fullPath, directory), true)
 		if err == nil {
 			child.HasMedia = len(childInfo.Seen) > 0
 			child.Translations = []string{
