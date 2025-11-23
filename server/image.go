@@ -12,18 +12,28 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const fallbackIconImage = `
-	<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none"
-	viewBox="0 0 24 24">
-		<path fill="#%[1]s" d="M10.054 3 8.387 8h5.892l1.667-5z"/>
-		<path fill="#%[1]s" d="
-			M7.946 3 6.279 8H2v2h20V8h-5.613l1.667-5H20.6A2.4 2.4 0 0 1 23
-			5.4v13.2a2.4 2.4 0 0 1-2.4 2.4H3.4A2.4 2.4 0 0 1 1 18.6V5.4A2.4
-			2.4 0 0 1 3.4 3z"/>
+const fallbackFolderImage = `
+	<svg xmlns="http://www.w3.org/2000/svg" height="24px" width="24px"
+		viewBox="0 -960 960 960" fill="#%[1]s">
+		<path d="M360-440h400L622-620l-92 120-62-80-108 140ZM120-120q-33
+			0-56.5-23.5T40-200v-520h80v520h680v80H120Zm160-160q-33
+			0-56.5-23.5T200-360v-440q0-33 23.5-56.5T280-880h200l80
+			80h280q33 0 56.5 23.5T920-720v360q0 33-23.5
+			56.5T840-280H280Zm0-80h560v-360H527l-80-80H280v440Zm0 0v-440 440Z"/>
 	</svg>
 `
 
-func (s *server) ServeFallbackIcon(w http.ResponseWriter, req *http.Request) {
+const fallbackVideoImage = `
+	<svg xmlns="http://www.w3.org/2000/svg" height="24px" width="24px"
+		viewBox="0 -960 960 960" fill="#%[1]s">
+		<path d="m160-800 80 160h120l-80-160h80l80 160h120l-80-160h80l80
+			160h120l-80-160h120q33 0 56.5 23.5T880-720v480q0 33-23.5
+			56.5T800-160H160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800Zm0
+			240v320h640v-320H160Zm0 0v320-320Z"/>
+	</svg>
+`
+
+func (s *server) ServeFallbackFolder(w http.ResponseWriter, req *http.Request) {
 	color := "666"
 	if s.colorRegexp.MatchString(req.URL.RawQuery) {
 		color = req.URL.RawQuery
@@ -31,17 +41,36 @@ func (s *server) ServeFallbackIcon(w http.ResponseWriter, req *http.Request) {
 	w.Header().Add("Content-Type", "image/svg+xml")
 	w.WriteHeader(http.StatusOK)
 	// TODO: ETag / If-None-Match handling
-	fmt.Fprintf(w, fallbackIconImage, color)
+	fmt.Fprintf(w, fallbackFolderImage, color)
+}
+
+func (s *server) ServeFallbackVideo(w http.ResponseWriter, req *http.Request) {
+	color := "666"
+	if s.colorRegexp.MatchString(req.URL.RawQuery) {
+		color = req.URL.RawQuery
+	}
+	w.Header().Add("Content-Type", "image/svg+xml")
+	w.WriteHeader(http.StatusOK)
+	// TODO: ETag / If-None-Match handling
+	fmt.Fprintf(w, fallbackVideoImage, color)
 }
 
 func (s *server) ServeImage(w http.ResponseWriter, req *http.Request) {
-	directory, err := s.getPath(w, req, true)
+	fullPath, isDir, err := s.getPath(w, req)
 	if err != nil {
 		return // Already wrote the response
 	}
-	log := logrus.WithField("path", directory)
-	f, err := os.Open(filepath.Join(directory, ".cover.jpg"))
-	log.WithError(err).Debug("Opened cover image")
+	log := logrus.WithField("path", fullPath)
+	var f io.ReadCloser
+	if isDir {
+		f, err = os.Open(filepath.Join(fullPath, ".cover.jpg"))
+		log.WithError(err).Debug("Opened cover image")
+	} else {
+		dir, base := filepath.Split(fullPath)
+		name := fmt.Sprintf(".%s.jpg", base)
+		f, err = os.Open(filepath.Join(dir, name))
+		log.WithError(err).Debug("Opened thumbnail")
+	}
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			w.WriteHeader(http.StatusNotFound)

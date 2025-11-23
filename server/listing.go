@@ -45,25 +45,28 @@ func commonLength(strings []string, isPrefix bool) int {
 	return 0
 }
 
-type directoryInput struct {
-	// The base name of the child directory.
-	Name string
-	// The full path from the root, URL escaped.
+const (
+	directoryFallback = "folder"
+	fileFallback      = "video"
+)
+
+type entry struct {
+	Fallback        string
+	Name            string
 	EscapedFullPath string
-	HasMedia        bool
-	Translations    []string
-	// Whether this directory has been completely seen.
-	Seen bool
+	Seen            bool
+}
+
+type directoryInput struct {
+	entry
+	HasMedia     bool
+	Translations []string
 }
 
 type fileInput struct {
-	// The base name of the file.
-	Name            string
-	EscapedFullPath string
+	entry
 	// The short title of the file.
 	Title string
-	// Whether this file has been seen.
-	Seen bool
 }
 
 type templateInput struct {
@@ -78,9 +81,16 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fullPath, err := s.getPath(w, req, true)
+	fullPath, isDir, err := s.getPath(w, req)
 	if err != nil {
 		// Already emitted the error to the client
+		return
+	}
+
+	if !isDir {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err := fmt.Fprintf(w, `Invalid path "%s"`, req.URL.Path)
+		logrus.WithError(err).WithField("path", fullPath).Debug("Not a directory")
 		return
 	}
 
@@ -100,25 +110,31 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 	}
 	input := templateInput{
 		directoryInput: directoryInput{
-			Name:            path.Base(fullPath),
-			EscapedFullPath: path.Join(escapedPathParts...),
-			HasMedia:        len(info.Seen) > 0,
-			Translations:    []string{info.NativeTitle, info.ChineseTitle, info.EnglishTitle},
+			entry: entry{
+				Fallback:        directoryFallback,
+				Name:            path.Base(fullPath),
+				EscapedFullPath: path.Join(escapedPathParts...),
+			},
+			HasMedia:     len(info.Seen) > 0,
+			Translations: []string{info.ChineseTitle, info.NativeTitle, info.EnglishTitle},
 		},
 	}
 
 	for directory := range info.Injested {
 		child := directoryInput{
-			Name:            directory,
-			EscapedFullPath: path.Join(input.EscapedFullPath, url.PathEscape(directory)),
+			entry: entry{
+				Fallback:        directoryFallback,
+				Name:            directory,
+				EscapedFullPath: path.Join(input.EscapedFullPath, url.PathEscape(directory)),
+			},
 		}
 		childInfo, err := injest.ReadInfo(filepath.Join(fullPath, directory))
 		if err == nil {
 			child.HasMedia = len(childInfo.Seen) > 0
 			child.Translations = []string{
-				childInfo.NativeTitle,
 				childInfo.ChineseTitle,
 				childInfo.EnglishTitle,
+				childInfo.NativeTitle,
 			}
 			child.Seen = true
 			for _, childSeen := range childInfo.Seen {
@@ -133,10 +149,13 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 
 	for file, seen := range info.Seen {
 		input.Files = append(input.Files, fileInput{
-			Name:            file,
-			EscapedFullPath: path.Join(append(slices.Clone(escapedPathParts), file)...),
-			Title:           file,
-			Seen:            seen,
+			entry: entry{
+				Fallback:        fileFallback,
+				Name:            file,
+				EscapedFullPath: path.Join(append(slices.Clone(escapedPathParts), file)...),
+				Seen:            seen,
+			},
+			Title: file,
 		})
 	}
 

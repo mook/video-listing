@@ -6,8 +6,9 @@
         <style>
           :root {
             --color-foreground: #111;
-            --color-dimmed: #666;
+            --color-dimmed: #888;
             --color-background: #eee;
+            --thumb-size: 138px;
           }
 
           @media (prefers-color-scheme: dark) {
@@ -28,107 +29,123 @@
           body {
             margin: 0;
           }
-          header {
-            padding: 0.5em;
+          header[role="listitem"] {
             font-weight: bold;
-            border-bottom: 1px solid var(--color-foreground);
+            border-bottom-color: var(--color-foreground);
+            border-bottom-width: 2px;
             position: sticky;
             top: 0;
-            height: 159px;
-            overflow: hidden;
+            min-height: 159px;
             background: var(--color-background);
+            padding: 0.5em;
           }
           ul {
             list-style: none;
             margin: 0;
             padding: 0;
           }
-          li {
-            overflow: hidden;
-            border: 1px solid color-mix(in hsl, var(--color-dimmed) 60%, transparent);
-            border-width: 1px 0;
-            padding: 0.5em;
+          *[role="listitem"] {
+            cursor: pointer;
+            display: flex;
+            flex-direction: row;
+            border: 0;
+            border-bottom: 1px solid color-mix(in hsl, var(--color-dimmed) 60%, transparent);
+            padding: 0;
+          }
+          *[role="listitem"][data-seen] {
+            color: var(--color-dimmed);
           }
           .thumb {
-            float: left;
-            width: 100px;
-            height: 138px;
+            width: var(--thumb-size);
+            height: var(--thumb-size);
+            min-width: var(--thumb-size);
+            min-height: var(--thumb-size);
             margin-right: 0.5em;
+            vertical-align: top;
+            object-fit: cover;
+            object-position: center center;
           }
-          .directories li object picture img {
+          .thumb img {
+            /* fallback */
             width: 100%;
+            height: 100%;
+          }
+          .title {
+            display: inline-block;
+            flex-grow: 1;
           }
           .translation {
             font-size: 70%;
             color: var(--color-dimmed);
           }
-          .thumb ~ :nth-child(n + 3 of .translation) {
+          .title > :nth-child(n + 3 of .translation) {
             display: none;
-          }
-          .files li {
-            height: 159px;
-            cursor: pointer;
           }
 
           :any-link {
             color: inherit;
             text-decoration: none;
           }
-          li[data-seen] {
-            color: var(--color-dimmed);
-          }
         </style>
         <script>
           function seen(event) {
-            const { target } = event;
+            const target = event.currentTarget;
             const path = target.getAttribute("data-path");
             const seen = target.hasAttribute("data-seen");
             fetch(`/m/${ path }?${ !seen }`, {
               method: 'POST',
-            }).then(() => {
-              if (seen) {
-                target.removeAttribute("data-seen");
-              } else {
-                target.setAttribute("data-seen", true);
+            }).then(({ok}) => {
+              if (ok) {
+                if (seen) {
+                  target.removeAttribute("data-seen");
+                } else {
+                  target.setAttribute("data-seen", true);
+                }
               }
             }).catch(ex => console.error(ex));
           }
         </script>
     </head>
     <body>
-      {{ define "directoryContents" }}
-        <object class="thumb"
-          {{ if .HasMedia }}
-            data="/i/{{ .EscapedFullPath }}" type="image/jpeg">
+      {{ define "thumbnail" }}
+        <object class="thumb" data="/i/{{ .EscapedFullPath }}" type="image/jpeg">
+          {{ if .Fallback }}
             <picture>
               <source media="(prefers-color-scheme: light)"
-                srcset="/i/fallback.svg?666" />
+                srcset="/i/{{ .Fallback }}.svg?666" />
               <source media="(prefers-color-scheme: dark)"
-                srcset="/i/fallback.svg?222" />
-              <img src="/i/fallback.svg">
+                srcset="/i/{{ .Fallback }}.svg?222" />
+              <img src="/i/{{ .Fallback }}.svg">
             </picture>
-          {{ else }}
-            ><!-- exists only for layout -->
           {{ end }}
         </object>
-        <div class="title">{{ .Name }}</div>
-        {{ range .Translations }}
-          {{ if . }}
-            <div class="translation">{{ . }}</div>
-          {{ end }}
+      {{ end }}
+      {{ define "directoryContents" }}
+        {{ if .HasMedia }}
+          {{ template "thumbnail" . }}
+        {{ else }}
+          <object class="thumb"><!-- placeholder --></object>
         {{ end }}
+        <ul class="title">
+          <li>{{ .Name }}</li>
+          {{ range .Translations }}
+            {{ if . }}
+              <li class="translation">{{ . }}</li>
+            {{ end }}
+          {{ end }}
+        </ul>
       {{ end }}
         <a
           {{ if .EscapedFullPath }} href=".." {{ end }}
         >
-          <header>
-          {{ template "directoryContents" . }}
+          <header role="listitem">
+            {{ template "directoryContents" . }}
           </header>
         </a>
         <ul class="directories">
             {{ range $.Directories }}
             <a href="/l/{{ .EscapedFullPath }}/">
-              <li {{ if .Seen }} data-seen="true" {{ end }} >
+              <li role="listitem" {{ if .Seen }} data-seen="true" {{ end }} >
                 {{ template "directoryContents" . }}
               </li>
             </a>
@@ -137,11 +154,13 @@
         <ul class="files">
             {{ range $.Files }}
             <li
+              role="listitem"
               {{ if .Seen }} data-seen="true" {{ end }}
               data-path="{{ .EscapedFullPath }}"
               onclick="seen(event)"
               >
-              {{ .Title }}
+              {{ template "thumbnail" . }}
+              <div class="title">{{ .Title }}</div>
             </li>
             {{ end }}
         </ul>

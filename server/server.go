@@ -34,7 +34,8 @@ func NewServer(root string) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /l/", http.StripPrefix("/l", http.HandlerFunc(s.ServeListing)))
 	mux.Handle("POST /m/", http.StripPrefix("/m", http.HandlerFunc(s.ServeMark)))
-	mux.Handle("GET /i/fallback.svg", http.HandlerFunc(s.ServeFallbackIcon))
+	mux.Handle("GET /i/folder.svg", http.HandlerFunc(s.ServeFallbackFolder))
+	mux.Handle("GET /i/video.svg", http.HandlerFunc(s.ServeFallbackVideo))
 	mux.Handle("GET /i/", http.StripPrefix("/i", http.HandlerFunc(s.ServeImage)))
 	mux.Handle("GET /{$}", http.RedirectHandler("/l/", http.StatusFound))
 
@@ -42,16 +43,15 @@ func NewServer(root string) http.Handler {
 }
 
 // getPath parses the path out of a HTTP request, returning the path to the
-// corresponding file or directory on disk.  The function also checks whether
-// the path is a directory, depending on the input.  If the check fails,
-// the response will have been written to the response writer already.
-func (s *server) getPath(w http.ResponseWriter, req *http.Request, isDir bool) (string, error) {
+// corresponding file or directory on disk.  It also returns whether the given
+// path is a directory.
+func (s *server) getPath(w http.ResponseWriter, req *http.Request) (string, bool, error) {
 	relPath := path.Clean(strings.Trim(req.URL.Path, "/"))
 	if !fs.ValidPath(relPath) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := fmt.Fprintf(w, `Invalid path "%s"`, relPath)
 		logrus.WithError(err).WithField("path", relPath).Debug("Invalid client request path")
-		return "", fmt.Errorf("Invalid client request path")
+		return "", false, fmt.Errorf("Invalid client request path")
 	}
 
 	fullPath := path.Join(s.root, relPath)
@@ -60,22 +60,15 @@ func (s *server) getPath(w http.ResponseWriter, req *http.Request, isDir bool) (
 		w.WriteHeader(http.StatusNotFound)
 		logrus.WithError(err).WithField("path", fullPath).Debug("Failed to stat file")
 		_, _ = fmt.Fprintf(w, `Failed to check path "%s"`, relPath)
-		return "", err
+		return "", false, err
 	}
 
-	if isDir {
-		if !info.IsDir() {
-			w.WriteHeader(http.StatusBadRequest)
-			_, err := fmt.Fprintf(w, `Invalid path "%s"`, relPath)
-			logrus.WithError(err).WithField("path", fullPath).Debug("Not a directory")
-			return "", fmt.Errorf("%s is not a directory", fullPath)
-		}
-	} else if !info.Mode().IsRegular() {
+	if !info.IsDir() && !info.Mode().IsRegular() {
 		w.WriteHeader(http.StatusBadRequest)
 		_, err := fmt.Fprintf(w, `Invalid path "%s"`, relPath)
 		logrus.WithError(err).WithField("path", fullPath).Debug("Not a regular file")
-		return "", fmt.Errorf("%s is not a regular file", fullPath)
+		return "", false, fmt.Errorf("%s is not a directory or a regular file", fullPath)
 	}
 
-	return fullPath, nil
+	return fullPath, info.IsDir(), nil
 }

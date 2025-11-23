@@ -16,9 +16,16 @@ func (s *server) ServeMark(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fullPath, err := s.getPath(w, req, false)
+	fullPath, isDir, err := s.getPath(w, req)
 	if err != nil {
 		// Already emitted the error to the client
+		return
+	}
+
+	if isDir {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err := fmt.Fprintf(w, `Invalid path "%s"`, req.URL.Path)
+		logrus.WithError(err).WithField("path", fullPath).Debug("Not a regular file")
 		return
 	}
 

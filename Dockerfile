@@ -12,7 +12,9 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -v -o /go/video-listing .
 
-FROM scratch
+FROM alpine:edge
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk add -U ffmpeg
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /go/video-listing /video-listing
 VOLUME [ "/media" ]
