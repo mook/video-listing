@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -60,6 +61,26 @@ type aniListResponse struct {
 	} `json:"data"`
 }
 
+type titleTransform struct {
+	match     func(string) bool
+	transform func(base, parent string) string
+}
+
+var titleTransforms = []titleTransform{
+	{
+		match: regexp.MustCompile(`^(?i)\s*season\s*\d+\s*$`).MatchString,
+		transform: func(base, parent string) string {
+			return parent + " " + regexp.MustCompile(`^(?i)\s*season\s*0*`).ReplaceAllString(base, "")
+		},
+	},
+	{
+		match: regexp.MustCompile(`\s+S\d+$`).MatchString,
+		transform: func(base, parent string) string {
+			return regexp.MustCompile(`\s+S(\d+)$`).ReplaceAllString(base, ` $1`)
+		},
+	},
+}
+
 // requestInfo makes a request to AniList and returns the relevant information.
 // This handles rate limiting by artificially extending the function runtime.
 func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoType, force bool) error {
@@ -72,11 +93,20 @@ func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoTy
 	// stated rate limit of 30 requests per minute.
 	timeout := time.After(10 * time.Second)
 	err := func() error {
-		log.Debug("Requesting info from AniList...")
+		search := path.Base(absPath)
+		for _, transform := range titleTransforms {
+			if transform.match(search) {
+				dir, base := path.Split(absPath)
+				parent := path.Base(dir)
+				search = transform.transform(base, parent)
+				break
+			}
+		}
+		log.WithField("search", search).Debug("Requesting info from AniList...")
 		input := aniListRequest{
 			Query: aniListQuery,
 			Variables: map[string]any{
-				"search": path.Base(absPath),
+				"search": search,
 			},
 		}
 		var buf bytes.Buffer
