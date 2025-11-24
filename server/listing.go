@@ -46,8 +46,9 @@ func commonLength(strings []string, isPrefix bool) int {
 }
 
 const (
-	directoryFallback = "folder"
-	fileFallback      = "video"
+	directoryFallback      = "folder"
+	mediaDirectoryFallback = "mediaFolder"
+	fileFallback           = "video"
 )
 
 type entry struct {
@@ -119,6 +120,9 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 			Translations: []string{info.ChineseTitle, info.NativeTitle, info.EnglishTitle},
 		},
 	}
+	if input.HasMedia {
+		input.Fallback = mediaDirectoryFallback
+	}
 
 	for directory := range info.Injested {
 		child := directoryInput{
@@ -135,6 +139,9 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 				childInfo.ChineseTitle,
 				childInfo.EnglishTitle,
 				childInfo.NativeTitle,
+			}
+			if child.HasMedia {
+				child.Fallback = mediaDirectoryFallback
 			}
 			child.Seen = true
 			for _, childSeen := range childInfo.Seen {

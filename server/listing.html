@@ -38,14 +38,38 @@
             min-height: 159px;
             background: var(--color-background);
             padding: 0.5em;
+            align-items: start;
           }
           ul {
             list-style: none;
             margin: 0;
             padding: 0;
           }
-          *[role="listitem"] {
+          .menu {
+            position: relative;
+          }
+          .menu button {
+            color: inherit;
+            background: transparent;
+            border: 0;
+            font: inherit;
+          }
+          .menu ul {
+            list-style-type: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            border: 1px solid var(--color-foreground);
+            background-color: var(--color-background);
+          }
+          .menu li {
             cursor: pointer;
+            margin: 0.2em;
+          }
+          .menu:not(:hover) ul {
+            display: none;
+          }
+          *[role="listitem"] {
             display: flex;
             flex-direction: row;
             border: 0;
@@ -55,10 +79,14 @@
           *[role="listitem"][data-seen] {
             color: var(--color-dimmed);
           }
+          *[role="listitem"][onclick] {
+            cursor: pointer;
+          }
           .directories *[role="listitem"] {
             background-color: color-mix(in hsl, var(--color-background) 90%, var(--color-dimmed));
           }
           .thumb {
+            display: inline-block;
             width: var(--thumb-size);
             height: var(--thumb-size);
             min-width: var(--thumb-size);
@@ -107,6 +135,12 @@
               }
             }).catch(ex => console.error(ex));
           }
+          function rescan(event) {
+            const path = event.currentTarget.getAttribute("data-path");
+            fetch(`/r/${ path }`, { method: 'POST' }).then(({ok}) => {
+              if (ok) {}
+            }).catch(ex => console.error(ex));
+          }
         </script>
     </head>
     <body>
@@ -123,12 +157,12 @@
           {{ end }}
         </object>
       {{ end }}
-      {{ define "directoryContents" }}
-        {{ if .HasMedia }}
+      <header role="listitem">
+        <a
+          {{ if .EscapedFullPath }} href=".." {{ end }}
+        >
           {{ template "thumbnail" . }}
-        {{ else }}
-          <object class="thumb"><!-- placeholder --></object>
-        {{ end }}
+        </a>
         <ul class="title">
           <li>{{ .Name }}</li>
           {{ range .Translations }}
@@ -137,35 +171,44 @@
             {{ end }}
           {{ end }}
         </ul>
-      {{ end }}
-        <a
-          {{ if .EscapedFullPath }} href=".." {{ end }}
-        >
-          <header role="listitem">
-            {{ template "directoryContents" . }}
-          </header>
-        </a>
-        <ul class="directories">
-            {{ range $.Directories }}
-            <a href="/l/{{ .EscapedFullPath }}/">
-              <li role="listitem" {{ if .Seen }} data-seen="true" {{ end }} >
-                {{ template "directoryContents" . }}
-              </li>
-            </a>
-            {{ end }}
-        </ul>
-        <ul class="files">
-            {{ range $.Files }}
+        <section class="menu">
+          <button>&#8942;</button>
+          <ul>
             <li
-              role="listitem"
-              {{ if .Seen }} data-seen="true" {{ end }}
-              data-path="{{ .EscapedFullPath }}"
-              onclick="seen(event)"
-              >
+              onclick="rescan(event)"
+              data-path="{{ .EscapedFullPath }}">Rescan</li>
+          </ul>
+        </section>
+      </header>
+      <ul class="directories">
+          {{ range $.Directories }}
+          <a href="/l/{{ .EscapedFullPath }}/">
+            <li role="listitem" {{ if .Seen }} data-seen="true" {{ end }} >
               {{ template "thumbnail" . }}
-              <div class="title">{{ .Title }}</div>
+              <ul class="title">
+                <li>{{ .Name }}</li>
+                {{ range .Translations }}
+                  {{ if . }}
+                    <li class="translation">{{ . }}</li>
+                  {{ end }}
+                {{ end }}
+              </ul>
             </li>
-            {{ end }}
-        </ul>
+          </a>
+          {{ end }}
+      </ul>
+      <ul class="files">
+          {{ range $.Files }}
+          <li
+            role="listitem"
+            {{ if .Seen }} data-seen="true" {{ end }}
+            data-path="{{ .EscapedFullPath }}"
+            onclick="seen(event)"
+            >
+            {{ template "thumbnail" . }}
+            <div class="title">{{ .Title }}</div>
+          </li>
+          {{ end }}
+      </ul>
     </body>
 </html>

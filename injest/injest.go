@@ -41,6 +41,7 @@ func (i *Injester) Queue(directory string) {
 	i.queue(&injestDirectory{
 		i:       i,
 		absPath: filepath.Clean(filepath.Join(i.root, directory)),
+		force:   true,
 	})
 }
 
@@ -57,6 +58,7 @@ func (i *Injester) queue(task task) {
 type injestDirectory struct {
 	i       *Injester
 	absPath string
+	force   bool
 }
 
 func (d *injestDirectory) String() string {
@@ -112,12 +114,12 @@ func (d *injestDirectory) Process(ctx context.Context) error {
 
 	if len(info.Seen) > 0 {
 		// This is a media directory; look up what it is.
-		err = d.i.requestInfo(ctx, d.absPath, info)
+		err = d.i.requestInfo(ctx, d.absPath, info, d.force)
 		log.WithError(err).WithField("info", info).Debug("Requested info")
 		// Ignore any errors here; we can rescan later.
 	}
 
-	if lastTime.After(info.Timestamp) {
+	if d.force || lastTime.After(info.Timestamp) {
 		info.changed = true
 		info.Timestamp = lastTime
 

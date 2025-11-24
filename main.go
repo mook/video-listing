@@ -34,8 +34,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func serve(ctx context.Context, mediaDir string) error {
-	s := server.NewServer(mediaDir)
+func serve(ctx context.Context, mediaDir string, queue func(string)) error {
+	s := server.NewServer(mediaDir, queue)
 
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+os.Getenv("PORT"))
 	if err != nil {
@@ -51,8 +51,7 @@ func serve(ctx context.Context, mediaDir string) error {
 	return nil
 }
 
-func doInjest(ctx context.Context, mediaDir string) error {
-	injester := injest.New(mediaDir)
+func doInjest(ctx context.Context, injester *injest.Injester) error {
 	var wg sync.WaitGroup
 	var err error
 	wg.Go(func() {
@@ -86,12 +85,13 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("Media directory %s is not a directory", *mediaDir)
 	}
 
+	injester := injest.New(*mediaDir)
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		return serve(ctx, *mediaDir)
+		return serve(ctx, *mediaDir, injester.Queue)
 	})
 	wg.Go(func() error {
-		return doInjest(ctx, *mediaDir)
+		return doInjest(ctx, injester)
 	})
 
 	if err := wg.Wait(); err != nil {

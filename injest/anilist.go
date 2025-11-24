@@ -62,9 +62,9 @@ type aniListResponse struct {
 
 // requestInfo makes a request to AniList and returns the relevant information.
 // This handles rate limiting by artificially extending the function runtime.
-func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoType) error {
+func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoType, force bool) error {
 	log := logrus.WithField("directory", absPath)
-	if info.AniListID != 0 && info.Version == version {
+	if info.AniListID != 0 && !force {
 		// We already fetched what we can from AniList, skip.
 		return nil
 	}

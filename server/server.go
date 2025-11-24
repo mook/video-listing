@@ -24,18 +24,23 @@ var tmpl = template.Must(template.New("listing.html").Parse(templateText))
 type server struct {
 	root        string
 	colorRegexp *regexp.Regexp
+	// A function taking a path relative to the root, which queues it to be injested.
+	queue func(string)
 }
 
-func NewServer(root string) http.Handler {
+func NewServer(root string, queue func(string)) http.Handler {
 	s := &server{
 		root:        root,
 		colorRegexp: regexp.MustCompile(`^[0-9a-f]{3}$`),
+		queue:       queue,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /l/", http.StripPrefix("/l", http.HandlerFunc(s.ServeListing)))
 	mux.Handle("POST /m/", http.StripPrefix("/m", http.HandlerFunc(s.ServeMark)))
-	mux.Handle("GET /i/folder.svg", http.HandlerFunc(s.ServeFallbackFolder))
-	mux.Handle("GET /i/video.svg", http.HandlerFunc(s.ServeFallbackVideo))
+	mux.Handle("POST /r/", http.StripPrefix("/r", http.HandlerFunc(s.ServeRescan)))
+	mux.Handle("GET /i/folder.svg", http.HandlerFunc(s.ServeFallbackImage))
+	mux.Handle("GET /i/mediaFolder.svg", http.HandlerFunc(s.ServeFallbackImage))
+	mux.Handle("GET /i/video.svg", http.HandlerFunc(s.ServeFallbackImage))
 	mux.Handle("GET /i/", http.StripPrefix("/i", http.HandlerFunc(s.ServeImage)))
 	mux.Handle("GET /{$}", http.RedirectHandler("/l/", http.StatusFound))
 

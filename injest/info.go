@@ -32,13 +32,11 @@ var mediaExtensions = map[string]struct{}{
 // InfoType describes the data in `.info.json` files in each directory.
 type InfoType struct {
 	// The last time injesting for this directory (not its children) was completed.
-	Timestamp time.Time `json:"timestamp"`
-	// The version of this software that generated this file.
-	Version      string `json:"version"`
-	AniListID    int    `json:"anilist,omitempty"`
-	NativeTitle  string `json:"native,omitempty"`
-	EnglishTitle string `json:"english,omitempty"`
-	ChineseTitle string `json:"chinese,omitempty"`
+	Timestamp    time.Time `json:"timestamp"`
+	AniListID    int       `json:"anilist,omitempty"`
+	NativeTitle  string    `json:"native,omitempty"`
+	EnglishTitle string    `json:"english,omitempty"`
+	ChineseTitle string    `json:"chinese,omitempty"`
 	// Mapping of each media file to whether it's marked as seen.
 	Seen map[string]bool `json:"seen,omitempty"`
 	// Mapping of each child directory to when it was last injested (mtime).
@@ -151,7 +149,6 @@ func WriteInfo(directory string, info *InfoType) error {
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	info.Version = version
 	if err := json.NewEncoder(f).Encode(info); err != nil {
 		return err
 	}
