@@ -117,7 +117,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 				EscapedFullPath: path.Join(escapedPathParts...),
 			},
 			HasMedia:     len(info.Seen) > 0,
-			Translations: []string{info.ChineseTitle, info.NativeTitle, info.EnglishTitle},
+			Translations: []string{info.ChineseTitle, info.EnglishTitle, info.NativeTitle},
 		},
 	}
 	if input.HasMedia {
