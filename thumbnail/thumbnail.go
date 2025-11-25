@@ -78,14 +78,16 @@ func getDuration(ctx context.Context, videoPath string) (time.Duration, error) {
 func getFrame(ctx context.Context, videoPath string, timeCode float64) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
 	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-loglevel", "quiet",
+		"-loglevel", "error",
 		"-ss", fmt.Sprintf("%f", timeCode),
 		"-t", "10",
 		"-i", videoPath,
 		"-filter:v", "select=eq(pict_type\\,I),thumbnail",
 		"-frames:v", "1",
-		"-f", "mjpeg", "-")
+		"-f", "webp",
+		"-")
 	cmd.Stdout = &buf
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}

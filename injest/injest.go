@@ -178,11 +178,13 @@ func (t *createThumbnail) String() string {
 
 func (t *createThumbnail) Process(ctx context.Context) error {
 	parent, base := filepath.Split(t.absPath)
-	thumbPath := filepath.Join(parent, fmt.Sprintf(".%s.jpg", base))
+	thumbPath := filepath.Join(parent, fmt.Sprintf(".%s.webp", base))
 	err := thumbnail.Create(ctx, t.absPath, thumbPath)
 	if err != nil {
 		return err
 	}
+	// Remove the old jpeg thumbnail if it exists.
+	_ = os.Remove(filepath.Join(parent, fmt.Sprintf(".%s.jpg", base)))
 	return nil
 }
 

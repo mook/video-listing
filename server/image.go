@@ -69,8 +69,10 @@ func (s *server) ServeImage(w http.ResponseWriter, req *http.Request) {
 		log.WithError(err).Debug("Opened cover image")
 	} else {
 		dir, base := filepath.Split(fullPath)
-		name := fmt.Sprintf(".%s.jpg", base)
-		f, err = os.Open(filepath.Join(dir, name))
+		f, err = os.Open(filepath.Join(dir, fmt.Sprintf(".%s.webp", base)))
+		if errors.Is(err, fs.ErrNotExist) {
+			f, err = os.Open(filepath.Join(dir, fmt.Sprintf(".%s.jpg", base)))
+		}
 		log.WithError(err).Debug("Opened thumbnail")
 	}
 	if err != nil {
