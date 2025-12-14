@@ -184,7 +184,15 @@ func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoTy
 		}
 		if media.CoverImage.Medium != "" {
 			coverPath := filepath.Join(absPath, ".cover.jpg")
-			if f, err := os.Open(coverPath); errors.Is(err, fs.ErrNotExist) {
+			needCover := byID && force
+			if !needCover {
+				if f, err := os.Open(coverPath); errors.Is(err, fs.ErrNotExist) {
+					needCover = true
+				} else if err == nil {
+					_ = f.Close()
+				}
+			}
+			if needCover {
 				f, err := os.Create(coverPath)
 				if err != nil {
 					return err
@@ -206,8 +214,6 @@ func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoTy
 				if _, err := io.Copy(f, resp.Body); err != nil {
 					return err
 				}
-			} else {
-				_ = f.Close()
 			}
 		}
 
