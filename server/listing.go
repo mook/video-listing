@@ -72,6 +72,7 @@ type fileInput struct {
 
 type templateInput struct {
 	directoryInput
+	AniListID   int
 	Directories []directoryInput
 	Files       []fileInput
 }
@@ -110,6 +111,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	input := templateInput{
+		AniListID: info.AniListID,
 		directoryInput: directoryInput{
 			entry: entry{
 				Fallback:        directoryFallback,

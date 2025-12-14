@@ -35,13 +35,32 @@ func New(root string) *Injester {
 	}
 }
 
+type QueueOptions struct {
+	// Directory relative to the media root for processing
+	Directory string
+	// Override AniList ID
+	ID int
+	// Force rescan; ignored if ID is set.
+	Force bool
+}
+
+type Queue func(QueueOptions)
+
 // Queue a single directory relative to the media root for processing, locating
 // information about the media contained therein.
-func (i *Injester) Queue(directory string) {
+func (i *Injester) Queue(opts QueueOptions) {
+	// Check that the directory is relative
+	if opts.Directory != "." {
+		absPath := filepath.Clean(filepath.Join(i.root, opts.Directory))
+		expectedRoot := fmt.Sprintf("%s%c", filepath.Clean(i.root), filepath.Separator)
+		if !strings.HasPrefix(absPath, expectedRoot) {
+			logrus.WithField("path", absPath).Error("Rejecting injester queue: invalid path")
+			return // Absolute path does not start with root
+		}
+	}
 	i.queue(&injestDirectory{
-		i:       i,
-		absPath: filepath.Clean(filepath.Join(i.root, directory)),
-		force:   true,
+		i:            i,
+		QueueOptions: opts,
 	})
 }
 
@@ -56,20 +75,23 @@ func (i *Injester) queue(task task) {
 }
 
 type injestDirectory struct {
-	i       *Injester
-	absPath string
-	force   bool
+	i *Injester
+	QueueOptions
+}
+
+func (d *injestDirectory) absPath() string {
+	return filepath.Join(d.i.root, d.Directory)
 }
 
 func (d *injestDirectory) String() string {
-	return fmt.Sprintf("<injest %s>", d.absPath)
+	return fmt.Sprintf("<injest %s>", d.Directory)
 }
 
 func (d *injestDirectory) Process(ctx context.Context) error {
-	log := logrus.WithField("directory", d.absPath)
+	log := logrus.WithField("directory", d.Directory)
 	log.Debug("Scanning directory")
 
-	entries, err := os.ReadDir(d.absPath)
+	entries, err := os.ReadDir(d.absPath())
 	if err != nil {
 		return err
 	}
@@ -106,27 +128,33 @@ func (d *injestDirectory) Process(ctx context.Context) error {
 		}
 	}
 
-	info, err := ReadInfo(d.absPath, true)
+	info, err := ReadInfo(d.absPath(), true)
 	log.WithError(err).WithField("info", info).Debug("Read existing info")
 	if err != nil {
 		return err
 	}
 
-	if len(info.Seen) > 0 {
+	if d.Force || d.ID != info.AniListID || len(info.Seen) > 0 {
 		// This is a media directory; look up what it is.
-		err = d.i.requestInfo(ctx, d.absPath, info, d.force)
+		if d.ID != 0 {
+			idChanged := info.AniListID != d.ID
+			info.AniListID = d.ID
+			err = d.i.requestInfo(ctx, d.absPath(), info, d.Force || idChanged, true)
+		} else {
+			err = d.i.requestInfo(ctx, d.absPath(), info, d.Force, false)
+		}
 		log.WithError(err).WithField("info", info).Debug("Requested info")
 		// Ignore any errors here; we can rescan later.
 	}
 
-	if d.force || lastTime.After(info.Timestamp) {
+	if d.Force || lastTime.After(info.Timestamp) {
 		info.changed = true
 		info.Timestamp = lastTime
 
 		for _, child := range files {
 			d.i.queue(&createThumbnail{
 				i:       d.i,
-				absPath: filepath.Join(d.absPath, child),
+				absPath: filepath.Join(d.absPath(), child),
 			})
 		}
 	}
@@ -140,8 +168,10 @@ func (d *injestDirectory) Process(ctx context.Context) error {
 	for child, t := range directories {
 		if t.After(info.Injested[child]) {
 			d.i.queue(&injestDirectory{
-				i:       d.i,
-				absPath: filepath.Join(d.absPath, child),
+				i: d.i,
+				QueueOptions: QueueOptions{
+					Directory: filepath.Join(d.Directory, child),
+				},
 			})
 			info.changed = true
 		}
@@ -155,7 +185,7 @@ func (d *injestDirectory) Process(ctx context.Context) error {
 			}
 		}
 
-		err = WriteInfo(d.absPath, info)
+		err = WriteInfo(d.absPath(), info)
 		log.WithError(err).WithField("info", info).Debug("Wrote info")
 		if err != nil {
 			return err
@@ -197,21 +227,19 @@ func (i *Injester) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		default:
-			err := func() error {
-				task := func() task {
-					i.cond.L.Lock()
-					defer i.cond.L.Unlock()
-					for len(i.pending) == 0 {
-						i.cond.Wait()
-					}
-					var task task
-					i.pending, task = i.pending[:len(i.pending)-1], i.pending[len(i.pending)-1]
-					return task
-				}()
-				return task.Process(ctx)
+			task := func() task {
+				i.cond.L.Lock()
+				defer i.cond.L.Unlock()
+				for len(i.pending) == 0 {
+					i.cond.Wait()
+				}
+				var task task
+				i.pending, task = i.pending[:len(i.pending)-1], i.pending[len(i.pending)-1]
+				return task
 			}()
+			err := task.Process(ctx)
 			if err != nil {
-				logrus.WithError(err).Error("failed to injest directory")
+				logrus.WithError(err).WithField("task", task).Error("failed to injest directory")
 			}
 		}
 	}

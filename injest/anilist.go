@@ -36,6 +36,23 @@ const aniListQuery = `
 		}
 	}
 `
+const aniListLookup = `
+	query ($id: Int!) {
+		Page {
+			media(id: $id, type: ANIME) {
+				id
+				title {
+					romaji
+					english
+					native
+				}
+				coverImage {
+					medium
+				}
+			}
+		}
+	}
+`
 
 type aniListRequest struct {
 	Query     string         `json:"query"`
@@ -83,7 +100,7 @@ var titleTransforms = []titleTransform{
 
 // requestInfo makes a request to AniList and returns the relevant information.
 // This handles rate limiting by artificially extending the function runtime.
-func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoType, force bool) error {
+func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoType, force, byID bool) error {
 	log := logrus.WithField("directory", absPath)
 	if info.AniListID != 0 && !force {
 		// We already fetched what we can from AniList, skip.
@@ -93,21 +110,32 @@ func (i *Injester) requestInfo(ctx context.Context, absPath string, info *InfoTy
 	// stated rate limit of 30 requests per minute.
 	timeout := time.After(10 * time.Second)
 	err := func() error {
-		search := path.Base(absPath)
-		for _, transform := range titleTransforms {
-			if transform.match(search) {
-				dir, base := path.Split(absPath)
-				parent := path.Base(dir)
-				search = transform.transform(base, parent)
-				break
+		var input aniListRequest
+		if byID && info.AniListID != 0 {
+			input = aniListRequest{
+				Query: aniListLookup,
+				Variables: map[string]any{
+					"id": info.AniListID,
+				},
 			}
-		}
-		log.WithField("search", search).Debug("Requesting info from AniList...")
-		input := aniListRequest{
-			Query: aniListQuery,
-			Variables: map[string]any{
-				"search": search,
-			},
+			log.WithField("id", info.AniListID).Debug("Requesting info from AniList...")
+		} else {
+			search := path.Base(absPath)
+			for _, transform := range titleTransforms {
+				if transform.match(search) {
+					dir, base := path.Split(absPath)
+					parent := path.Base(dir)
+					search = transform.transform(base, parent)
+					break
+				}
+			}
+			log.WithField("search", search).Debug("Requesting info from AniList...")
+			input = aniListRequest{
+				Query: aniListQuery,
+				Variables: map[string]any{
+					"search": search,
+				},
+			}
 		}
 		var buf bytes.Buffer
 		if err := json.NewEncoder(&buf).Encode(input); err != nil {

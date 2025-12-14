@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mook/video-listing/injest"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,10 +26,10 @@ type server struct {
 	root        string
 	colorRegexp *regexp.Regexp
 	// A function taking a path relative to the root, which queues it to be injested.
-	queue func(string)
+	queue injest.Queue
 }
 
-func NewServer(root string, queue func(string)) http.Handler {
+func NewServer(root string, queue injest.Queue) http.Handler {
 	s := &server{
 		root:        root,
 		colorRegexp: regexp.MustCompile(`^[0-9a-f]{3}$`),
@@ -37,7 +38,7 @@ func NewServer(root string, queue func(string)) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /l/", http.StripPrefix("/l", http.HandlerFunc(s.ServeListing)))
 	mux.Handle("POST /m/", http.StripPrefix("/m", http.HandlerFunc(s.ServeMark)))
-	mux.Handle("POST /r/", http.StripPrefix("/r", http.HandlerFunc(s.ServeRescan)))
+	mux.Handle("POST /o/", http.StripPrefix("/o", http.HandlerFunc(s.ServeOverride)))
 	mux.Handle("GET /i/folder.svg", http.HandlerFunc(s.ServeFallbackImage))
 	mux.Handle("GET /i/mediaFolder.svg", http.HandlerFunc(s.ServeFallbackImage))
 	mux.Handle("GET /i/video.svg", http.HandlerFunc(s.ServeFallbackImage))

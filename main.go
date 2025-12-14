@@ -34,7 +34,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func serve(ctx context.Context, mediaDir string, queue func(string)) error {
+func serve(ctx context.Context, mediaDir string, queue injest.Queue) error {
 	s := server.NewServer(mediaDir, queue)
 
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+os.Getenv("PORT"))
@@ -59,7 +59,9 @@ func doInjest(ctx context.Context, injester *injest.Injester) error {
 	})
 	wg.Go(func() {
 		time.Sleep(time.Millisecond)
-		injester.Queue(".")
+		injester.Queue(injest.QueueOptions{
+			Directory: ".",
+		})
 	})
 	wg.Wait()
 	if err != nil {
