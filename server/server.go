@@ -37,6 +37,7 @@ func NewServer(root string, queue injest.Queue) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /l/", http.StripPrefix("/l", http.HandlerFunc(s.ServeListing)))
+	mux.Handle("GET /j/", http.StripPrefix("/j", http.HandlerFunc(s.ServeJSON)))
 	mux.Handle("POST /m/", http.StripPrefix("/m", http.HandlerFunc(s.ServeMark)))
 	mux.Handle("POST /o/", http.StripPrefix("/o", http.HandlerFunc(s.ServeOverride)))
 	mux.Handle("GET /i/folder.svg", http.HandlerFunc(s.ServeFallbackImage))
