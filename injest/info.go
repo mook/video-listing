@@ -41,7 +41,9 @@ type InfoType struct {
 	Seen map[string]bool `json:"seen,omitempty"`
 	// Mapping of each child directory to when it was last injested (mtime).
 	Injested map[string]time.Time `json:"injested,omitempty"`
-	changed  bool
+	// Root only: recently marked paths
+	Recents []string `json:"recents,omitempty"`
+	changed bool
 	// Mapping of file/directory name to modification time.
 	mtimes map[string]time.Time
 }

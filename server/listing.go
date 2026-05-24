@@ -75,6 +75,7 @@ type templateInput struct {
 	AniListID   int
 	Directories []directoryInput
 	Files       []fileInput
+	Recents     []string
 }
 
 func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
@@ -121,6 +122,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 			HasMedia:     len(info.Seen) > 0,
 			Translations: []string{info.ChineseTitle, info.EnglishTitle, info.NativeTitle},
 		},
+		Recents: info.Recents,
 	}
 	if input.HasMedia {
 		input.Fallback = mediaDirectoryFallback

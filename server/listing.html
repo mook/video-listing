@@ -96,7 +96,7 @@
             display: none;
           }
 
-          #override {
+          dialog {
             border: 1px solid var(--color-foreground);
             color: var(--color-foreground);
             background: var(--color-background);
@@ -104,6 +104,8 @@
               background-color: black;
               opacity: 0.6;
             }
+          }
+          #override {
             & > form {
               display: grid;
               grid-auto-columns: auto auto;
@@ -149,8 +151,12 @@
               if (ok) {}
             }).catch(ex => console.error(ex));
           }
-          function openOverride() {
+          function openDialog() {
+            {{ if .EscapedFullPath }}
             const dialog = document.getElementById("override");
+            {{ else }}
+            const dialog = document.getElementById("recents");
+            {{ end }}
             dialog.showModal();
           }
           function submitOverride() {
@@ -202,7 +208,7 @@
             {{ end }}
           {{ end }}
         </ul>
-        <button id="menu" onclick="openOverride()">&#8942;</button>
+        <button id="menu" onclick="openDialog()">&#8942;</button>
       </header>
       <ul class="directories">
           {{ range $.Directories }}
@@ -245,6 +251,16 @@
           <input id="override-mark" name="mark" type="checkbox">
           <span id="override-error"></span>
           <input type="submit">
+        </form>
+      </dialog>
+      <dialog id="recents" closedby="any">
+        <form method="dialog">
+          <h2>Recents</h2>
+          <ul>
+            {{ range .Recents }}
+              <li><a href="{{ . }}">{{ . }}</a>
+            {{ end }}
+          </ul>
         </form>
       </dialog>
     </body>

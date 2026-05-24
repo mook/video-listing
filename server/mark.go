@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"path/filepath"
+	"slices"
 	"strconv"
 
 	"github.com/mook/video-listing/injest"
@@ -59,4 +61,34 @@ func (s *server) ServeMark(w http.ResponseWriter, req *http.Request) {
 		_, _ = fmt.Fprintf(w, `Error writing state`)
 		return
 	}
+
+	rootInfo, err := injest.ReadInfo(s.root, false)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logrus.WithError(err).Debug("Error reading root state")
+		_, _ = fmt.Fprintf(w, "Error reading root state")
+		return
+	}
+	relPath, err := filepath.Rel(s.root, dir)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logrus.WithError(err).Debug("Error getting relative path")
+		_, _ = fmt.Fprintf(w, "Error getting relative path")
+	}
+	const maxRecent = 5
+	recents := append([]string{relPath}, rootInfo.Recents...)
+	rootInfo.Recents = make([]string, 0, maxRecent)
+	for _, item := range recents {
+		if !slices.Contains(rootInfo.Recents, item) {
+			rootInfo.Recents = append(rootInfo.Recents, item)
+			if len(rootInfo.Recents) >= maxRecent {
+				break
+			}
+		}
+	}
+	if err := injest.WriteInfo(s.root, rootInfo); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logrus.WithError(err).Debug("Error writing root state")
+	}
+	_, _ = fmt.Fprintf(w, "Error writing root state")
 }
