@@ -162,12 +162,17 @@
           function submitOverride() {
             const dialog = document.getElementById("override");
             const path = dialog.getAttribute("data-path");
+            const abandon = document.getElementById('override-abandon').checked;
+            const body = {
+              id: parseInt(document.getElementById('override-id').value, 10),
+              force: document.getElementById('override-force').checked,
+              mark: document.getElementById('override-mark').checked,
+            };
+            if (abandon != {{ .Abandoned }}) {
+              body.abandon = abandon;
+            }
             fetch(`/o/${ path }`,
-              { method: 'POST', body: JSON.stringify({
-                id: parseInt(document.getElementById('override-id').value, 10),
-                force: document.getElementById('override-force').checked,
-                mark: document.getElementById('override-mark').checked,
-              }) }
+              { method: 'POST', body: JSON.stringify(body) }
             ).then(resp => {
               if (resp.ok) {
                 dialog.close();
@@ -249,6 +254,8 @@
           <input id="override-force" name="force" type="checkbox" {{ if eq .AniListID 0 }} checked {{ end }} >
           <label for="override-mark">Toggle all</label>
           <input id="override-mark" name="mark" type="checkbox">
+          <label for="override-abandon">Abandoned</label>
+          <input id="override-abandon" name="abandon" type="checkbox" {{ if .Abandoned }} checked {{ end }}>
           <span id="override-error"></span>
           <input type="submit">
         </form>

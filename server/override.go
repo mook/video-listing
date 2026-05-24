@@ -38,9 +38,10 @@ func (s *server) ServeOverride(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 
 	var body struct {
-		ID    int  `json:"id"`
-		Force bool `json:"force"`
-		Mark  bool `json:"mark"`
+		ID      int   `json:"id"`
+		Force   bool  `json:"force"`
+		Mark    bool  `json:"mark"`
+		Abandon *bool `json:"abandon,omitempty"`
 	}
 	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -94,6 +95,25 @@ func (s *server) ServeOverride(w http.ResponseWriter, req *http.Request) {
 				logrus.WithError(err).WithField("path", relPath).Error("Failed to update seen state")
 				return
 			}
+		}
+	}
+
+	if body.Abandon != nil {
+		if info == nil {
+			info, err = injest.ReadInfo(fullPath, false)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = fmt.Fprintf(w, "Failed to read existing status")
+				logrus.WithError(err).WithField("path", relPath).Error("Failed to read existing status")
+				return
+			}
+		}
+		info.Abandoned = *body.Abandon
+		if err := injest.WriteInfo(fullPath, info); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprintf(w, "Failed to update abandoned state")
+			logrus.WithError(err).WithField("path", relPath).Error("Failed to update abandoned state")
+			return
 		}
 	}
 

@@ -41,6 +41,8 @@ type InfoType struct {
 	Seen map[string]bool `json:"seen,omitempty"`
 	// Mapping of each child directory to when it was last injested (mtime).
 	Injested map[string]time.Time `json:"injested,omitempty"`
+	// If set, this series was abandoned and should be displayed as seen.
+	Abandoned bool `json:"abandoned,omitempty"`
 	// Root only: recently marked paths
 	Recents []string `json:"recents,omitempty"`
 	changed bool

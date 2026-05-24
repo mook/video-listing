@@ -73,6 +73,7 @@ type fileInput struct {
 type templateInput struct {
 	directoryInput
 	AniListID   int
+	Abandoned   bool
 	Directories []directoryInput
 	Files       []fileInput
 	Recents     []string
@@ -113,6 +114,7 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 	}
 	input := templateInput{
 		AniListID: info.AniListID,
+		Abandoned: info.Abandoned,
 		directoryInput: directoryInput{
 			entry: entry{
 				Fallback:        directoryFallback,
@@ -148,8 +150,10 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 				child.Fallback = mediaDirectoryFallback
 			}
 			child.Seen = true
-			for _, childSeen := range childInfo.Seen {
-				child.Seen = child.Seen && childSeen
+			if !childInfo.Abandoned {
+				for _, childSeen := range childInfo.Seen {
+					child.Seen = child.Seen && childSeen
+				}
 			}
 		}
 		input.Directories = append(input.Directories, child)
