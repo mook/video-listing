@@ -15,7 +15,7 @@ import (
 )
 
 // commonLength returns the length of the longest common prefix or suffix for a
-// slice of strings; note that the slice will be modified.
+// slice of strings; the slice is not modified.
 func commonLength(strings []string, isPrefix bool) int {
 	// For our use, empty or single element strings should not have prefix or
 	// suffix removed.
@@ -171,13 +171,22 @@ func (s *server) ServeListing(w http.ResponseWriter, req *http.Request) {
 	// Post process: Strip common prefix and suffix of the strings
 	if len(input.Files) > 1 {
 		titles := make([]string, 0, len(input.Files))
+		minLen := len(input.Files[0].Title)
 		for _, f := range input.Files {
 			titles = append(titles, f.Name)
+			if len(f.Name) < minLen {
+				minLen = len(f.Title)
+			}
 		}
 		prefixLen := commonLength(titles, true)
 		suffixLen := commonLength(titles, false)
+		if prefixLen+suffixLen >= minLen {
+			// If a file would end up empty, don't do the prefix/suffix stripping.
+			prefixLen = 0
+			suffixLen = 0
+		}
 		for i := range input.Files {
-			input.Files[i].Title = input.Files[i].Title[prefixLen : len(input.Files[i].Title)-suffixLen]
+			input.Files[i].Title = input.Files[i].Name[prefixLen : len(input.Files[i].Name)-suffixLen]
 		}
 	}
 	slices.SortFunc(input.Files, func(a, b fileInput) int {
