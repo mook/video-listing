@@ -26,6 +26,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             font-size: 5vw;
             margin: 0;
+            scroll-padding-top: calc(var(--thumb-size) + 0.2em);
           }
           body {
             margin: 0;
@@ -201,7 +202,7 @@
       {{ end }}
       <header role="listitem">
         <a
-          {{ if .EscapedFullPath }} href=".." {{ end }}
+          {{ if .EscapedFullPath }} href="..#{{ .EscapedFullPath }}" {{ end }}
         >
           {{ template "thumbnail" . }}
         </a>
@@ -217,7 +218,7 @@
       </header>
       <ul class="directories">
           {{ range $.Directories }}
-          <a href="/l/{{ .EscapedFullPath }}/">
+          <a href="/l/{{ .EscapedFullPath }}/" id="{{ .EscapedFullPath }}">
             <li role="listitem" {{ if .Seen }} data-seen="true" {{ end }} >
               {{ template "thumbnail" . }}
               <ul class="title">
