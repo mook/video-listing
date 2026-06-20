@@ -131,6 +131,20 @@
             color: inherit;
             text-decoration: none;
           }
+
+          @media (min-aspect-ratio: 1) {
+            /* For computers / wide things, use cards */
+            ul {
+              display: flex;
+              flex-wrap: wrap;
+            }
+            li[role="listitem"] {
+              width: 30vw;
+              margin: 0.5em;
+              height: 5em;
+              overflow: clip;
+            }
+          }
         </style>
         <script>
           function seen(event) {
